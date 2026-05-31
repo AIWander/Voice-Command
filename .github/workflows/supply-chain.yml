@@ -1,8 +1,6 @@
 name: Supply Chain
 
-# SCA for the voice-mcp crate (lives in voice-mcp/):
-#  - cargo audit: RustSec advisories
-#  - cargo deny:  license compliance, dependency bans, source allow-listing
+# SCA for the voice-mcp crate (lives in voice-mcp/). Both tools via taiki-e prebuilt.
 on:
   push:
     branches: [main]
@@ -16,10 +14,6 @@ on:
 permissions:
   contents: read
 
-defaults:
-  run:
-    working-directory: voice-mcp
-
 jobs:
   audit:
     name: cargo audit
@@ -29,9 +23,9 @@ jobs:
         working-directory: voice-mcp
     steps:
       - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Install cargo-audit
-        run: command -v cargo-audit || cargo install cargo-audit --locked
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
       - name: Ensure lockfile
         run: test -f Cargo.lock || cargo generate-lockfile
       - name: cargo audit
