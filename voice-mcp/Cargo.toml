@@ -3,6 +3,8 @@ name = "voice-mcp"
 version = "0.3.0"
 edition = "2021"
 description = "Rust MCP server for voice - TTS via edge-tts, STT via voice_server.py, with checkpoint recovery"
+license = "Apache-2.0"
+repository = "https://github.com/AIWander/Voice-Command"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }

@@ -1,15 +1,25 @@
 name: Supply Chain
+
+# SCA for the voice-mcp crate (lives in voice-mcp/):
+#  - cargo audit: RustSec advisories
+#  - cargo deny:  license compliance, dependency bans, source allow-listing
 on:
   push:
     branches: [main]
-    paths: ["voice-mcp/**/Cargo.toml", "voice-mcp/**/Cargo.lock", ".github/workflows/supply-chain.yml"]
+    paths: ["voice-mcp/**/Cargo.toml", "voice-mcp/**/Cargo.lock", "voice-mcp/deny.toml", ".github/workflows/supply-chain.yml"]
   pull_request:
-    paths: ["voice-mcp/**/Cargo.toml", "voice-mcp/**/Cargo.lock", ".github/workflows/supply-chain.yml"]
+    paths: ["voice-mcp/**/Cargo.toml", "voice-mcp/**/Cargo.lock", "voice-mcp/deny.toml", ".github/workflows/supply-chain.yml"]
   schedule:
     - cron: "0 6 * * 1"
   workflow_dispatch: {}
+
 permissions:
   contents: read
+
+defaults:
+  run:
+    working-directory: voice-mcp
+
 jobs:
   audit:
     name: cargo audit
@@ -26,3 +36,17 @@ jobs:
         run: test -f Cargo.lock || cargo generate-lockfile
       - name: cargo audit
         run: cargo audit
+
+  deny:
+    name: cargo deny
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: voice-mcp
+    steps:
+      - uses: actions/checkout@v5
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+      - name: cargo deny check
+        run: cargo deny check licenses bans sources
