@@ -304,6 +304,7 @@ fn get_edge_tts_defaults() -> (String, f64, String, f64) {
     (voice, speed, pitch, volume)
 }
 
+#[cfg(target_os = "windows")]
 async fn play_audio(
     audio_path_str: &str,
     volume: f64,
@@ -364,6 +365,58 @@ Remove-Item '{0}' -ErrorAction SilentlyContinue"#,
     }
 
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+async fn play_audio(
+    audio_path_str: &str,
+    volume: f64,
+    wait_for_completion: bool,
+) -> Result<(), String> {
+    let volume_arg = volume.clamp(0.0, 1.0).to_string();
+
+    if wait_for_completion {
+        let output = Command::new("afplay")
+            .arg("-v")
+            .arg(&volume_arg)
+            .arg(audio_path_str)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await
+            .map_err(|e| format!("Failed to play audio with afplay: {}", e))?;
+
+        let _ = std::fs::remove_file(audio_path_str);
+
+        if !output.status.success() {
+            return Err(format!(
+                "Audio playback failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+    } else {
+        Command::new("sh")
+            .arg("-c")
+            .arg("afplay -v \"$1\" \"$2\"; rm -f \"$2\"")
+            .arg("voice-mcp-afplay")
+            .arg(&volume_arg)
+            .arg(audio_path_str)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| format!("Failed to start afplay audio playback: {}", e))?;
+    }
+
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+async fn play_audio(
+    _audio_path_str: &str,
+    _volume: f64,
+    _wait_for_completion: bool,
+) -> Result<(), String> {
+    Err("Audio playback is currently implemented for Windows and macOS only".to_string())
 }
 
 async fn speak_internal(

@@ -18,9 +18,10 @@ jobs:
         continue-on-error: true
 
   syntax:
-    runs-on: windows-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [windows-latest, macos-latest]
         python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v6
@@ -30,7 +31,10 @@ jobs:
       - run: python -m py_compile server.py voice_server.py response_analyzer.py
 
   test:
-    runs-on: windows-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
