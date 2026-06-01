@@ -176,9 +176,45 @@ fn get_session_id() -> String {
     id.clone()
 }
 
+/// Locate voice.config.toml via a search order so the binary is portable:
+///   1. VOICE_CONFIG_PATH env var (explicit override)
+///   2. voice.config.toml next to the executable
+///   3. ~/.config/voice/voice.config.toml
+///   4. legacy C:\CPC\voice\voice.config.toml (back-compat for existing installs)
+fn find_config_path() -> Option<String> {
+    if let Ok(p) = std::env::var("VOICE_CONFIG_PATH") {
+        if !p.is_empty() && std::path::Path::new(&p).exists() {
+            return Some(p);
+        }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let p = dir.join("voice.config.toml");
+            if p.exists() {
+                return Some(p.to_string_lossy().into_owned());
+            }
+        }
+    }
+    if let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")) {
+        let p = std::path::Path::new(&home)
+            .join(".config").join("voice").join("voice.config.toml");
+        if p.exists() {
+            return Some(p.to_string_lossy().into_owned());
+        }
+    }
+    let legacy = "C:\\CPC\\voice\\voice.config.toml";
+    if std::path::Path::new(legacy).exists() {
+        return Some(legacy.to_string());
+    }
+    None
+}
+
 fn read_voice_config() -> Value {
-    let path = "C:\\CPC\\voice\\voice.config.toml";
-    match std::fs::read_to_string(path) {
+    let path = match find_config_path() {
+        Some(p) => p,
+        None => return json!({}),
+    };
+    match std::fs::read_to_string(&path) {
         Ok(content) => match content.parse::<toml::Table>() {
             Ok(table) => serde_json::to_value(table).unwrap_or(json!({})),
             Err(_) => json!({}),
