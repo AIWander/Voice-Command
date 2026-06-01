@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 permissions:
   contents: write
@@ -13,6 +13,7 @@ jobs:
     name: Build ${{ matrix.target }}
     runs-on: windows-latest
     strategy:
+      fail-fast: false
       matrix:
         include:
           - target: x86_64-pc-windows-msvc
@@ -30,6 +31,51 @@ jobs:
       - name: Rename artifact
         shell: bash
         run: mv voice-mcp/target/${{ matrix.target }}/release/voice-mcp.exe ${{ matrix.artifact }}
-      - uses: softprops/action-gh-release@v3
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
         with:
-          files: ${{ matrix.artifact }}
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write # keyless cosign signing via Sigstore OIDC
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Generate SHA256SUMS
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+      - name: Sign binaries + checksums (keyless / Sigstore)
+        working-directory: dist
+        # Verify with:
+        #   cosign verify-blob --certificate <f>.pem --signature <f>.sig \
+        #     --certificate-identity-regexp 'https://github.com/AIWander/Voice-Command/.*' \
+        #     --certificate-oidc-issuer https://token.actions.githubusercontent.com <f>
+        run: |
+          for f in *.exe SHA256SUMS; do
+            cosign sign-blob --yes "$f" \
+              --output-signature "$f.sig" \
+              --output-certificate "$f.pem"
+          done
+      - name: Create release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            dist/*.exe
+            dist/SHA256SUMS
+            dist/*.sig
+            dist/*.pem
+          draft: true
+          prerelease: false
+          fail_on_unmatched_files: true
