@@ -25,7 +25,7 @@
     work for any STDIO-MCP host that uses the same shape.
 
 .PARAMETER InstallDir
-    Where voice-mcp.exe lands. Default: C:\CPC\servers
+    Where voice-mcp.exe lands. Default: %LOCALAPPDATA%\CPC\servers
 
 .PARAMETER PythonExe
     Python executable for `pip install`. Default: auto-detect (python.exe on PATH,
@@ -57,7 +57,7 @@
 
 [CmdletBinding()]
 param(
-    [string]$InstallDir = "C:\CPC\servers",
+    [string]$InstallDir = $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA "CPC\servers" } else { Join-Path $HOME ".voice-command\servers" }),
     [string]$PythonExe  = "",
     [switch]$SkipPython,
     [switch]$DryRun,

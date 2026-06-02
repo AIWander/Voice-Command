@@ -6,13 +6,15 @@
 
 Voice-Command lets you voice-control your AI end-to-end. You say what you want done — Claude chat or another AI does it, using whatever tools, connectors, and MCPs it has access to — and narrates what it's doing as it goes. The "Command" isn't a euphemism. **Anything the AI can do, you can ask for out loud:** search the web, check your calendar, send email through your connectors, write or fix code, edit files on your computer, run shell commands, kick off automations. If it can do it typed, you can do it spoken.
 
-Under the hood it uses [faster-whisper](https://github.com/SYSTRAN/faster-whisper) to understand what you say (running fully on your own computer — your voice doesn't go to the cloud) and [edge-tts](https://github.com/rany2/edge-tts) to speak responses back. It also reads the *feel* of how you say things — excited, hesitant, frustrated — and passes that along so the AI can respond more naturally.
+Under the hood it uses [faster-whisper](https://github.com/SYSTRAN/faster-whisper) to understand what you say (running fully on your own computer — your voice doesn't go to the cloud) and [edge-tts](https://github.com/rany2/edge-tts) to speak responses back through Microsoft Edge's online text-to-speech service. It also reads the *feel* of how you say things — excited, hesitant, frustrated — and passes that along so the AI can respond more naturally.
 
 ---
 
-## 🔒 Stays on your computer
+## 🔒 What stays local
 
-Voice-Command and all its dependencies are local tools that run on your hardware. Speech-to-text, text-to-speech, audio capture, audio playback — all of it happens on your machine. **Voice-Command itself never reaches out to the internet on its own.** Your AI may reach out (Claude pings Anthropic, ChatGPT pings OpenAI, and so on), and the AI may use other tools that reach out (web search, email connectors), but the voice layer adds zero outbound traffic. For a fully-offline setup, pair it with a local model in LM Studio.
+Voice-Command's microphone capture, speech-to-text, silence detection, noise filtering, emotion detection, and audio playback run on your machine. The listening server binds to `localhost:5123`, not your LAN.
+
+Text-to-speech currently uses `edge-tts`, which calls Microsoft Edge's online TTS service. Your AI may also reach out for its own model calls (Claude pings Anthropic, ChatGPT pings OpenAI, and so on), and tools it calls might reach out too (web search, email connectors). For a fully offline loop, pair this with a local model and replace `edge-tts` with a local TTS backend.
 
 ---
 
@@ -66,7 +68,7 @@ Anything your AI has the tools to do. A few examples to give you the shape of it
 - *"Send an email to Sarah saying I'll be ten minutes late."* → uses your Gmail connector
 - *"Run the deploy script and tell me when it's done."* → uses shell access
 
-The voice layer doesn't add capabilities — it just changes how you reach them. Whatever connectors, MCPs, and tools you've already hooked up to your AI all work the same. You're just using your mouth instead of your keyboard.
+The voice layer doesn't add capabilities — it just changes how you reach them. Whatever connectors, MCPs, and tools you've already hooked up to your AI all work the same. You're just using your mouth instead of your keyboard. Treat voice commands the same way you treat typed commands: if your AI has tools that can send email, edit files, run shell commands, or trigger automations, those tools can also be invoked by speech.
 
 ---
 
@@ -78,7 +80,7 @@ Voice-Command is most useful when your AI also has hands. These three companion 
 - **[`hands`](https://github.com/AIWander/hands)** — browser automation, Windows UI control, vision/OCR
 - **[`workflow`](https://github.com/AIWander/workflow)** — API discovery and replay, credential vault, scheduled flows
 
-Install any combination. Voice-Command is the mouth and ears; these are the rest of the body. All of them run locally, none of them reach out unless the AI explicitly asks them to.
+Install any combination. Voice-Command is the mouth and ears; these are the rest of the body. These tools run locally, but the actions they perform can still touch files, browsers, APIs, email, or shell commands depending on what you have enabled.
 
 ---
 
@@ -93,7 +95,7 @@ If you have **Claude Desktop with [`ops`](https://github.com/AIWander/ops) insta
 Your AI will:
 
 1. Grab the right `voice-mcp.exe` for your computer (ARM64 or x64) from the [latest release](https://github.com/AIWander/Voice-Command/releases/latest)
-2. Drop it somewhere sensible (usually `C:\CPC\servers\`)
+2. Drop it somewhere sensible (usually `%LOCALAPPDATA%\CPC\servers\`)
 3. Wire it into your AI client's MCP config file — your existing setup is preserved, and a timestamped backup is made first, so nothing breaks
 4. Clone this repo and install the Python pieces
 5. Write you a `START_VOICE_SERVER.bat` you can double-click whenever you want to talk
@@ -144,7 +146,7 @@ If your AI can run scripts but isn't great at multi-step shell flows, point it a
 
 What it does, in order:
 
-1. Detects your CPU architecture (ARM64 or x64) and downloads the matching `voice-mcp.exe` from the latest release to `C:\CPC\servers\` (override with `-InstallDir`).
+1. Detects your CPU architecture (ARM64 or x64) and downloads the matching `voice-mcp.exe` from the latest release to `%LOCALAPPDATA%\CPC\servers\` (override with `-InstallDir`).
 2. Installs Python listening-server dependencies with `pip install -r requirements.txt` (skip with `-SkipPython` if you only want to *talk*, not *listen*).
 3. Detects which MCP clients you have installed (Claude Code, Claude Desktop, Codex Windows, Gemini CLI, LM Studio) and adds a `voice` entry to each — backed up first.
 4. For Codex (TOML), prints the snippet to append manually — PowerShell can't round-trip TOML safely.
@@ -155,7 +157,7 @@ Useful flags:
 - `-Verify` — report state only, change nothing
 - `-DryRun` — print what *would* happen
 - `-SkipPython` — binary + configs only
-- `-InstallDir <path>` — install the binary somewhere other than `C:\CPC\servers`
+- `-InstallDir <path>` — install the binary somewhere other than `%LOCALAPPDATA%\CPC\servers`
 
 ---
 
@@ -262,7 +264,7 @@ For everyday use, there's a Rust version of that wrapper (`voice-mcp.exe`) that'
 
 ### Config snippets per client
 
-Copy the snippet for your AI client into the file path shown. `install.ps1` does the wiring for you on JSON clients — these snippets are the fallback if it can't reach the file (or if you'd rather edit by hand). All paths assume `voice-mcp.exe` lives at `C:\CPC\servers\voice-mcp.exe` — change to wherever you installed it.
+Copy the snippet for your AI client into the file path shown. `install.ps1` does the wiring for you on JSON clients — these snippets are the fallback if it can't reach the file (or if you'd rather edit by hand). The snippets below use `C:\Users\YOUR-USER\AppData\Local\CPC\servers\voice-mcp.exe`; replace `YOUR-USER` with your Windows username, or use the exact path printed by `install.ps1`.
 
 #### Claude Code — `%USERPROFILE%\.claude\mcp.json`
 
@@ -270,7 +272,7 @@ Copy the snippet for your AI client into the file path shown. `install.ps1` does
 {
   "mcpServers": {
     "voice": {
-      "command": "C:\\CPC\\servers\\voice-mcp.exe"
+      "command": "C:\\Users\\YOUR-USER\\AppData\\Local\\CPC\\servers\\voice-mcp.exe"
     }
   }
 }
@@ -282,7 +284,7 @@ Copy the snippet for your AI client into the file path shown. `install.ps1` does
 {
   "mcpServers": {
     "voice": {
-      "command": "C:\\CPC\\servers\\voice-mcp.exe"
+      "command": "C:\\Users\\YOUR-USER\\AppData\\Local\\CPC\\servers\\voice-mcp.exe"
     }
   }
 }
@@ -292,8 +294,8 @@ Copy the snippet for your AI client into the file path shown. `install.ps1` does
 
 ```toml
 [mcp_servers.voice]
-command = "C:\\CPC\\servers\\voice-mcp.exe"
-cwd = "C:\\CPC\\servers"
+command = "C:\\Users\\YOUR-USER\\AppData\\Local\\CPC\\servers\\voice-mcp.exe"
+cwd = "C:\\Users\\YOUR-USER\\AppData\\Local\\CPC\\servers"
 ```
 
 > `install.ps1` doesn't auto-edit this one — TOML round-tripping in PowerShell is fragile. Append the block manually; it's two lines.
@@ -304,7 +306,7 @@ cwd = "C:\\CPC\\servers"
 {
   "mcpServers": {
     "voice": {
-      "command": "C:\\CPC\\servers\\voice-mcp.exe"
+      "command": "C:\\Users\\YOUR-USER\\AppData\\Local\\CPC\\servers\\voice-mcp.exe"
     }
   }
 }
@@ -318,7 +320,7 @@ cwd = "C:\\CPC\\servers"
 {
   "mcpServers": {
     "voice": {
-      "command": "C:\\CPC\\servers\\voice-mcp.exe"
+      "command": "C:\\Users\\YOUR-USER\\AppData\\Local\\CPC\\servers\\voice-mcp.exe"
     }
   }
 }
@@ -378,6 +380,7 @@ You'll need a [Rust toolchain](https://rustup.rs/) installed. Building takes a c
 | `VOICE_CONFIG_PATH` | Where your `voice.config.toml` lives | Auto-discovered |
 | `VOICE_FFMPEG_PATH` | Where ffmpeg lives | Found via PATH |
 | `VOICE_EMOTION_LOG_DIR` | Where emotion logs get written | `~/.voice/logs/` |
+| `VOICE_TRANSCRIPT_LOG_PATH` | Rolling transcript log path for voice checkpoints | `%LOCALAPPDATA%\Voice-Command\voice_sessions\rolling_log.jsonl` |
 
 ---
 

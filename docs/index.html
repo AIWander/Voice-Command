@@ -78,7 +78,7 @@ footer a:hover{color:var(--accent)}
 
   <h1 class="hero">Talk it out.<br>Take command.<br>Voice-Command.</h1>
   <p class="hero-sub">Talk to your AI as you cook. Command your AI as you're doing the dishes. Get updates on what your AI is doing with just your earpiece. Hands-free for hands-busy moments.</p>
-  <p class="hero-meta">Windows · MIT-licensed · Works with Claude, Codex, Gemini, LM Studio</p>
+  <p class="hero-meta">Windows · Apache-2.0 licensed · Works with Claude, Codex, Gemini, LM Studio</p>
 
   <div class="hero-actions">
     <a class="btn btn-primary" href="https://github.com/AIWander/Voice-Command#the-easy-way-to-install-ask-your-ai-to-do-it">Install</a>
@@ -91,8 +91,8 @@ footer a:hover{color:var(--accent)}
     <p>You talk, your AI does the thing. Whatever your AI can do typed — search the web, check your calendar, send an email through your connectors, write code, edit files on your computer, kick off automations — you can now ask for out loud. And it narrates back what it's doing as it goes, so you don't have to look at the screen.</p>
     <p>The voice layer doesn't add new capabilities. It just changes how you reach the ones your AI already has. Same connectors. Same MCPs. Same tools. You're just using your mouth instead of your keyboard.</p>
 
-    <h2>Stays on your computer</h2>
-    <p>Your voice never leaves the machine. Speech-to-text runs through <code>faster-whisper</code> locally; text-to-speech goes through <code>edge-tts</code>. The audio capture, the playback — all of it is on your hardware. <strong>Voice-Command itself adds zero outbound traffic.</strong> Your AI still reaches out for its own model calls (Claude pings Anthropic, ChatGPT pings OpenAI), and tools it calls might too (web search, email connectors). But the voice layer stays put. Pair it with a local model in LM Studio and the whole loop is offline.</p>
+    <h2>What stays local</h2>
+    <p>Microphone capture, speech-to-text, silence detection, noise filtering, emotion detection, and audio playback run on your machine. The listening server binds to <code>localhost:5123</code>, not your LAN. Text-to-speech currently uses <code>edge-tts</code>, which calls Microsoft Edge's online TTS service. Your AI still reaches out for its own model calls (Claude pings Anthropic, ChatGPT pings OpenAI), and tools it calls might too (web search, email connectors). For a fully offline loop, pair this with a local model and replace <code>edge-tts</code> with a local TTS backend.</p>
   </article>
 
   <div class="section-label">How a turn works</div>
@@ -111,7 +111,7 @@ footer a:hover{color:var(--accent)}
   <article>
     <p>You shouldn't need a CS degree to get this running. If you've got Claude Desktop, Cowork, Claude Code, Codex (the Windows app), Gemini CLI, or LM Studio open right now, just copy this and paste it to your AI:</p>
     <div class="pre"><span class="pre-label">paste to your AI</span>https://github.com/AIWander/Voice-Command — Can you install this MCP for us to use here, set up the voice listening server, and make me a .bat to launch it. Walk me through any restart or step I need. Tell me when everything's installed and we're ready to talk.</div>
-    <p>Your AI will grab the right <code>voice-mcp.exe</code> for your machine (ARM64 or x64), drop it in <code>C:\CPC\servers\</code>, wire it into your client's MCP config (backed up first), install the Python pieces, and write you a <code>START_VOICE_SERVER.bat</code> you can double-click whenever you want to talk.</p>
+    <p>Your AI will grab the right <code>voice-mcp.exe</code> for your machine (ARM64 or x64), drop it in <code>%LOCALAPPDATA%\CPC\servers\</code>, wire it into your client's MCP config (backed up first), install the Python pieces, and write you a <code>START_VOICE_SERVER.bat</code> you can double-click whenever you want to talk.</p>
     <p>If your AI can run scripts but isn't great at multi-step shell flows, point it at <a href="https://github.com/AIWander/Voice-Command/blob/main/install.ps1"><code>install.ps1</code></a> instead — it does the whole install loop deterministically.</p>
 
     <h2>Verify by saying hi</h2>
@@ -146,7 +146,7 @@ footer a:hover{color:var(--accent)}
         <p class="card-blurb">Watch the agent work once, capture the API patterns, then replay direct HTTP forever after. OS-keyring credential vault, scheduled flows.</p>
       </a>
     </div>
-    <p style="margin-top:24px">Install any combination. Voice-Command is the mouth and ears; these are the rest of the body. None of them reach out unless the AI explicitly asks them to.</p>
+    <p style="margin-top:24px">Install any combination. Voice-Command is the mouth and ears; these are the rest of the body. These tools run locally, but the actions they perform can still touch files, browsers, APIs, email, or shell commands depending on what you have enabled.</p>
   </article>
 
   <div class="section-label">Works with</div>
@@ -165,7 +165,7 @@ footer a:hover{color:var(--accent)}
   </article>
 
   <footer>
-    <span>© 2026 AIWander · MIT-licensed</span>
+    <span>© 2026 AIWander · Apache-2.0 licensed</span>
     <span>
       <a href="https://github.com/AIWander/Voice-Command" target="_blank" rel="noopener">GitHub</a> ·
       <a href="https://aiwander.ai" target="_blank" rel="noopener">AIWander.ai</a> ·
