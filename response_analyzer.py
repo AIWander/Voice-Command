@@ -83,57 +83,57 @@ def count_pattern(text: str, patterns: list) -> int:
 
 def analyze_response(text: str, context: str = "") -> dict:
     """Analyze a Claude response for emotional markers"""
-    
+
     text_lower = text.lower()
     words = text.split()
     word_count = len(words)
     sentences = re.split(r'[.!?]+', text)
     sentence_count = len([s for s in sentences if s.strip()])
-    
+
     if word_count == 0:
         return {"error": "Empty response"}
-    
+
     # 1. Hedge density (hedges per 100 words)
     hedge_count = count_pattern(text, HEDGE_WORDS)
     hedge_density = (hedge_count / word_count) * 100
-    
+
     # 2. Question rate (questions per sentence)
     question_count = text.count('?')
     question_rate = question_count / max(sentence_count, 1)
-    
+
     # 3. Time to point (words in first sentence / total words)
     first_sentence = sentences[0] if sentences else ""
     first_sentence_words = len(first_sentence.split())
     # Check for preamble patterns
     has_preamble = any(re.match(p, text_lower) for p in PREAMBLE_PATTERNS)
     preamble_ratio = first_sentence_words / word_count if has_preamble else 0
-    
+
     # 4. List vs prose
     has_bullets = bool(re.search(r'^\s*[-•*]\s', text, re.MULTILINE))
     has_numbers = bool(re.search(r'^\s*\d+[.)]\s', text, re.MULTILINE))
     is_listy = has_bullets or has_numbers
-    
+
     # 5. Excitement markers
     excitement_count = count_pattern(text, EXCITEMENT_MARKERS)
     exclamation_count = text.count('!')
     emoji_count = len(re.findall(r'[\U0001F300-\U0001F9FF]', text))
     excitement_score = (excitement_count + exclamation_count * 2 + emoji_count * 3) / word_count * 100
-    
+
     # 6. Volunteering rate
     volunteer_count = count_pattern(text, VOLUNTEERING_PHRASES)
     volunteering_score = volunteer_count / max(sentence_count, 1)
-    
+
     # Composite scores
     confidence_score = max(0, 100 - hedge_density * 10)  # Lower hedging = higher confidence
     engagement_score = (question_rate * 30 + excitement_score * 2 + volunteering_score * 20)
-    
+
     # Infer emotional state (thresholds from config)
     t = THRESHOLDS
     excited_t = t.get("excited", {})
     uncertain_t = t.get("uncertain", {})
     curious_t = t.get("curious", {})
     engaged_t = t.get("engaged", {})
-    
+
     if excitement_score > excited_t.get("excitement_score_min", 5) and hedge_density < excited_t.get("hedge_density_max", 3):
         inferred_state = "excited"
     elif hedge_density > uncertain_t.get("hedge_density_min", 8):
@@ -146,7 +146,7 @@ def analyze_response(text: str, context: str = "") -> dict:
         inferred_state = "engaged"
     else:
         inferred_state = "neutral"
-    
+
     result = {
         "timestamp": datetime.now().isoformat(),
         "context": context,
@@ -172,7 +172,7 @@ def analyze_response(text: str, context: str = "") -> dict:
         },
         "inferred_state": inferred_state
     }
-    
+
     return result
 
 def log_analysis(analysis: dict):
@@ -185,10 +185,10 @@ def get_recent_analyses(n: int = 10) -> list:
     """Get last N analyses from log"""
     if not LOG_PATH.exists():
         return []
-    
+
     with open(LOG_PATH, 'r', encoding='utf-8') as f:
         lines = f.readlines()
-    
+
     analyses = []
     for line in lines[-n:]:
         try:
@@ -202,16 +202,16 @@ def get_emotion_trends() -> dict:
     analyses = get_recent_analyses(50)
     if not analyses:
         return {"error": "No data yet"}
-    
+
     states = [a.get('inferred_state', 'neutral') for a in analyses]
     avg_confidence = sum(a['composite']['confidence_score'] for a in analyses) / len(analyses)
     avg_engagement = sum(a['composite']['engagement_score'] for a in analyses) / len(analyses)
     avg_hedge = sum(a['metrics']['hedge_density'] for a in analyses) / len(analyses)
-    
+
     state_counts = {}
     for s in states:
         state_counts[s] = state_counts.get(s, 0) + 1
-    
+
     return {
         "sample_size": len(analyses),
         "state_distribution": state_counts,
@@ -229,7 +229,7 @@ def get_emotion_trends() -> dict:
 
 if __name__ == "__main__":
     import sys
-    
+
     if len(sys.argv) < 2:
         print("Usage: python response_analyzer.py <command> [args]")
         print("Commands:")
@@ -237,29 +237,29 @@ if __name__ == "__main__":
         print("  trends             - Show emotion trends")
         print("  recent [n]         - Show recent analyses")
         sys.exit(1)
-    
+
     cmd = sys.argv[1].lower()
-    
+
     if cmd == "analyze":
         if len(sys.argv) < 3:
             # Read from stdin
             text = sys.stdin.read()
         else:
             text = ' '.join(sys.argv[2:])
-        
+
         result = analyze_response(text)
         log_analysis(result)
         print(json.dumps(result, indent=2))
-    
+
     elif cmd == "trends":
         trends = get_emotion_trends()
         print(json.dumps(trends, indent=2))
-    
+
     elif cmd == "recent":
         n = int(sys.argv[2]) if len(sys.argv) > 2 else 10
         recent = get_recent_analyses(n)
         for a in recent:
             print(f"{a['timestamp'][:19]} | {a['inferred_state']:10} | conf:{a['composite']['confidence_score']:5.1f} | eng:{a['composite']['engagement_score']:5.1f}")
-    
+
     else:
         print(f"Unknown command: {cmd}")
