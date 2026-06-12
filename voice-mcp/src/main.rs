@@ -52,7 +52,7 @@ fn tool_definitions() -> Value {
         "tools": [
             {
                 "name": "speak",
-                "description": "Speak text aloud using edge-tts with high-quality neural voices.",
+                "description": "Queue text for speech via the Voice App (non-blocking: returns immediately while audio plays, so you can keep working). The user can pause/resume playback with their headset media button or the app window; listen_for_speech automatically waits for playback to fully finish. Set wait=true to block until playback completes. Falls back to direct edge-tts playback if the Voice App isn't running.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -60,14 +60,26 @@ fn tool_definitions() -> Value {
                         "voice": { "type": "string", "description": "Voice (default: from config)" },
                         "speed": { "type": "number", "description": "Speech rate multiplier (default: 1.0, range 0.5-2.0)" },
                         "pitch": { "type": "string", "description": "Pitch adjustment, e.g. '+10Hz' or '-5Hz' (default: from config)" },
-                        "volume": { "type": "number", "description": "Volume multiplier (default: 1.0, range 0.0-1.0)" }
+                        "volume": { "type": "number", "description": "Volume multiplier (default: 1.0, range 0.0-1.0)" },
+                        "wait": { "type": "boolean", "description": "Block until playback finishes, including user pauses (default: false)" }
                     },
                     "required": ["text"]
                 }
             },
             {
+                "name": "playback_control",
+                "description": "Control TTS playback in the Voice App: pause, resume, toggle, skip (current item), stop (clear whole queue), or status (state, position, queue length). Requires the Voice App (voice_app.py) to be running.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "action": { "type": "string", "description": "pause | resume | toggle | skip | stop | status" }
+                    },
+                    "required": ["action"]
+                }
+            },
+            {
                 "name": "listen_for_speech",
-                "description": "Listen for voice input. Returns transcribed speech.",
+                "description": "Listen for voice input. Returns transcribed speech. If Voice App TTS playback is active or paused, recording (and the ready-beep) automatically waits until playback fully finishes — a user pause stalls the handoff.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -478,16 +490,121 @@ async fn speak_internal(
     Ok("spoke".to_string())
 }
 
+/// Try the Voice App's /say endpoint. Returns Ok(None) when the app isn't
+/// running or only the legacy listen-only server is on the port (caller
+/// falls back to direct edge-tts playback).
+async fn speak_via_app(
+    text: &str,
+    voice: &str,
+    speed: f64,
+    pitch: &str,
+    volume: f64,
+    wait: bool,
+) -> Result<Option<Value>, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .map_err(|e| format!("Client error: {}", e))?;
+    let body = json!({
+        "text": text, "voice": voice, "speed": speed,
+        "pitch": pitch, "volume": volume
+    });
+    let resp = match client
+        .post("http://localhost:5123/say")
+        .json(&body)
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(_) => return Ok(None),
+    };
+    let v: Value = match resp.json().await {
+        Ok(v) => v,
+        Err(_) => return Ok(None),
+    };
+    if !v["success"].as_bool().unwrap_or(false) {
+        // Legacy voice_server.py answers unknown paths with this exact error
+        if v["error"].as_str() == Some("Unknown endpoint") {
+            return Ok(None);
+        }
+        return Err(v["error"].as_str().unwrap_or("speak failed").to_string());
+    }
+    add_to_transcript("assistant", text);
+    let id = v["id"].clone();
+    if wait {
+        // Block until the playback queue drains. A user pause stalls this
+        // too, so "wait" means wait for the user to actually hear it all.
+        let poll = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .map_err(|e| format!("Client error: {}", e))?;
+        for _ in 0..3600u32 {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            let snap: Value = match poll.get("http://localhost:5123/playback").send().await {
+                Ok(r) => r.json().await.unwrap_or(json!({})),
+                Err(_) => continue,
+            };
+            let idle = snap["state"].as_str() == Some("IDLE")
+                && snap["queue"].as_u64().unwrap_or(0) == 0;
+            if idle {
+                return Ok(Some(json!({"status": "spoke", "id": id})));
+            }
+        }
+        return Err("Timed out waiting for playback to finish".to_string());
+    }
+    Ok(Some(json!({
+        "status": "queued",
+        "id": id,
+        "note": "playback in progress; listen_for_speech will wait for it to finish"
+    })))
+}
+
 async fn speak(
     text: &str,
     voice: &str,
     speed: f64,
     pitch: &str,
     volume: f64,
-) -> Result<String, String> {
-    // Keep speak half-duplex safe so a follow-up listen_for_speech
-    // call cannot start while TTS audio is still playing.
-    speak_internal(text, voice, speed, pitch, volume, true).await
+    wait: bool,
+) -> Result<Value, String> {
+    if let Some(result) = speak_via_app(text, voice, speed, pitch, volume, wait).await? {
+        return Ok(result);
+    }
+    // Legacy path: blocking playback keeps speak half-duplex safe so a
+    // follow-up listen_for_speech cannot start while audio is playing.
+    speak_internal(text, voice, speed, pitch, volume, true)
+        .await
+        .map(|s| json!({"status": s, "via": "legacy"}))
+}
+
+async fn playback_control(action: &str) -> Result<Value, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("Client error: {}", e))?;
+    let resp = match action {
+        "status" => client.get("http://localhost:5123/playback").send().await,
+        "pause" | "resume" | "toggle" | "skip" | "stop" => {
+            client
+                .post(format!("http://localhost:5123/{}", action))
+                .send()
+                .await
+        }
+        _ => {
+            return Err(format!(
+                "Unknown action: {} (use pause|resume|toggle|skip|stop|status)",
+                action
+            ))
+        }
+    };
+    let resp = resp.map_err(|e| {
+        if e.is_connect() {
+            "Voice App not running. Start: START_VOICE_APP.bat".to_string()
+        } else {
+            format!("Request failed: {}", e)
+        }
+    })?;
+    resp.json().await.map_err(|e| format!("Parse error: {}", e))
 }
 
 async fn listen_for_speech(
@@ -576,9 +693,15 @@ async fn check_voice_server() -> Result<Value, String> {
                 .await
                 .map_err(|e| format!("Parse error: {}", e))?;
             if json["success"].as_bool().unwrap_or(false) {
+                let is_app = json["app"].as_str() == Some("voice_app");
                 Ok(json!({
                     "ready": true,
-                    "message": "Voice server ready",
+                    "message": if is_app {
+                        "Voice App ready (unified playback + listening, pause via headset)"
+                    } else {
+                        "Voice server ready (legacy listen-only; playback controls unavailable)"
+                    },
+                    "app": is_app,
                     "session_id": get_session_id(),
                     "history_loaded": loaded_count
                 }))
@@ -768,8 +891,13 @@ async fn handle_tool_call(name: &str, args: &Value) -> Result<Value, String> {
                 .map(|s| s.to_string())
                 .unwrap_or(cfg_pitch);
             let volume = args["volume"].as_f64().unwrap_or(cfg_volume);
-            let result = speak(text, voice, speed, &pitch_str, volume).await?;
-            Ok(json!(result))
+            let wait = args["wait"].as_bool().unwrap_or(false);
+            speak(text, voice, speed, &pitch_str, volume, wait).await
+        }
+
+        "playback_control" => {
+            let action = args["action"].as_str().ok_or("action required")?;
+            playback_control(action).await
         }
 
         "listen_for_speech" => {

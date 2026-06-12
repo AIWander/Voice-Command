@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Voice App** (`voice_app.py`, Windows x64 + ARM64) — a single windowed app that replaces the listening terminal: TTS playback queue with true pause/resume, listening with live mic level, color-coded transcript, and status display. Launch with `START_VOICE_APP.bat`.
+- **Headset pause/resume** — the app registers a native Windows media session (SMTC via `winsdk`), so the play/pause button on your headset (or keyboard) pauses Claude's voice exactly like any other media. Fallback path (no `winsdk`): a persistent PowerShell-hosted WPF player plus a global media-key hook that only captures the key while the app's audio is active.
+- **Listen handoff gated on playback end** — `listen_for_speech` now waits for queued/paused playback to finish before the ready-beep, so pausing the voice stalls the switch back to listening; the AI can finish responding while you're still hearing it.
+- `speak` is **non-blocking** when the Voice App is running (queues audio and returns; `wait=true` restores blocking), with automatic fallback to the old direct playback when only the legacy listening server is up.
+- New `playback_control` MCP tool: `pause | resume | toggle | skip | stop | status`.
+- `voice.config.example.toml`: new `[playback]` section (backend, media-key hook, always-on-top) and `[listen] beam_size` (Whisper beam width, default 5).
+- `requirements.txt`: `winsdk` on Windows for the native media session.
+- CI compile check now covers `voice_app.py`.
+
+- Experimental macOS bootstrap support (#23 by @LeonidasZhak): `START_VOICE_SERVER.sh` launcher, Homebrew install notes, `afplay` playback on Darwin for both the Python MCP fallback and the Rust wrapper, macOS CI legs, and Darwin release targets. The terminal listening server remains the supported path on macOS.
+
 ## [0.3.0] - 2026-05-15
 
 ### Added

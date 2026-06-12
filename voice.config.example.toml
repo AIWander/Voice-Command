@@ -39,3 +39,16 @@ rms_threshold = 100.0
 pre_record_enabled = true
 noise_filter_enabled = true
 listen_timeout_secs = 120
+# Whisper beam search width (higher = more accurate, slower)
+beam_size = 5
+
+[playback]
+# Voice App (voice_app.py, Windows) playback engine. "auto" tries winsdk —
+# a native Windows media session, so your headset play/pause button is
+# routed by the OS — and falls back to a PowerShell-hosted player with a
+# global media-key hook. Options: auto | winsdk | subproc
+backend = "auto"
+# In subproc mode, capture the play/pause media key while audio is active
+media_key_hook = true
+# Keep the Voice App window above other windows
+always_on_top = false

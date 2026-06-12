@@ -28,7 +28,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - run: python -m py_compile server.py voice_server.py response_analyzer.py
+      - run: python -m py_compile server.py voice_server.py response_analyzer.py voice_app.py
 
   test:
     runs-on: ${{ matrix.os }}

@@ -20,7 +20,7 @@ Text-to-speech currently uses `edge-tts`, which calls Microsoft Edge's online TT
 
 ## 🖥️ Platform support
 
-**Windows is the primary supported platform.** **macOS** has an experimental source install path: the Python listener runs with Homebrew `portaudio`, `server.py` uses the built-in `afplay` player for TTS playback, and the Rust `voice-mcp` wrapper builds on both Intel and Apple Silicon. For **Linux**, see the upstream [`AIWander/voice`](https://github.com/AIWander/voice) repo — there's a community fork there with Linux support.
+**Windows is the primary supported platform** (x64 and ARM64), and it now gets the **Voice App** — a single window that handles speech playback *and* listening, with pause/resume from your headset button. See [The Voice App](#the-voice-app-windows) below. **macOS** has an experimental source install path: the Python listener runs with Homebrew `portaudio`, `server.py` uses the built-in `afplay` player for TTS playback, and the Rust `voice-mcp` wrapper builds on both Intel and Apple Silicon — macOS uses the terminal listening server rather than the Voice App for now. For **Linux**, see the upstream [`AIWander/voice`](https://github.com/AIWander/voice) repo — there's a community fork there with Linux support.
 
 ---
 
@@ -230,6 +230,29 @@ Optional knobs you can pass to `/listen`:
 
 ---
 
+## The Voice App (Windows)
+
+The terminal listener works, but on Windows there's a nicer way: **the Voice App**. One small window replaces the terminal entirely and handles both halves of the conversation:
+
+```
+START_VOICE_APP.bat
+```
+
+What you get:
+
+- **Pause the AI's voice with your headset button.** The app registers as a real Windows media session, so the play/pause button on your earbuds, headset, or keyboard pauses and resumes Claude's voice exactly like it would Spotify. There's a pause button in the window too (it turns amber while paused), and spacebar works.
+- **Pausing also pauses the conversation.** The switch back to listening is triggered by the *end of playback*, not the end of the AI's response — so while you have the voice paused, the mic stays off and the ready-beep waits. Unpause, let it finish, and listening starts on its own.
+- **The AI keeps working while you listen.** Speech is queued and played in the background, so the AI can keep using tools — or even finish its whole response — while you're still hearing it.
+- **Status at a glance**: speaking / paused / listening state, playback progress, live mic level, and a color-coded transcript of the conversation.
+
+It works on both **x64 and ARM64** Windows (on ARM64, build the `.venv` from x64 Python 3.11 — same note as the listener, `ctranslate2` doesn't ship ARM64 wheels). Native media-session support uses the `winsdk` package; if it isn't available the app falls back to an equivalent player with a media-key hook, and everything still works.
+
+The app serves the same `http://localhost:5123` API as the terminal listener (so the MCP wrapper auto-detects it), plus playback endpoints: `POST /say`, `/pause`, `/resume`, `/toggle`, `/skip`, `/stop`, and `GET /playback`.
+
+On macOS, stick with `./START_VOICE_SERVER.sh` — the Voice App's media-session integration is Windows-only for now.
+
+---
+
 ## Running headless on Windows
 
 If you don't want a console window sitting on screen, swap `python.exe` for `pythonw.exe` (the windowless Python host) and launch via PowerShell's hidden window flag:
@@ -279,7 +302,8 @@ It looks for config in this order:
 `server.py` is a thin wrapper that exposes three tools to any MCP client:
 
 - `speak` — say something out loud
-- `listen_for_speech` — listen for what the user says
+- `listen_for_speech` — listen for what the user says (waits for any paused/playing speech to finish first)
+- `playback_control` — pause, resume, skip, or stop the voice playback (Voice App only)
 - `start_voice_mode` — kick off a back-and-forth conversation
 
 For everyday use, there's a Rust version of that wrapper (`voice-mcp.exe` on Windows, `voice-mcp` on macOS) that's faster and more stable. Windows builds come as release downloads (ARM64 + x64), and the release workflow is set up to publish macOS Intel + Apple Silicon builds on future tags. The Python `server.py` works as a fallback if you'd rather not use the binary.
