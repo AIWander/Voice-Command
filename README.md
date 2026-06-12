@@ -20,7 +20,7 @@ Text-to-speech currently uses `edge-tts`, which calls Microsoft Edge's online TT
 
 ## 🖥️ Platform support
 
-**Currently Windows-only.** For **Linux**, see the upstream [`AIWander/voice`](https://github.com/AIWander/voice) repo — there's a community fork there with Linux support. **macOS** support is coming.
+**Windows is the primary supported platform.** **macOS** has an experimental source install path: the Python listener runs with Homebrew `portaudio`, `server.py` uses the built-in `afplay` player for TTS playback, and the Rust `voice-mcp` wrapper builds on both Intel and Apple Silicon. For **Linux**, see the upstream [`AIWander/voice`](https://github.com/AIWander/voice) repo — there's a community fork there with Linux support.
 
 ---
 
@@ -126,10 +126,10 @@ If your AI doesn't have access to your filesystem and shell, scroll down to **Ma
 
 ## What you'll need on your computer
 
-- **Windows 10 or 11** (Linux/macOS support not yet — see [Platform support](#-platform-support) above)
+- **Windows 10 or 11**, or macOS for the experimental source install path
 - **Python 3.11 or newer** — [download here](https://www.python.org/downloads/)
 - **A microphone** — built-in or USB, doesn't need to be fancy
-- **PortAudio** — a library that lets Python use your mic; usually installs automatically
+- **PortAudio** — a library that lets Python use your mic; usually installs automatically on Windows, and should be installed with Homebrew on macOS
 - **ffmpeg** — for playing back the AI's voice; free, [grab it here](https://ffmpeg.org/download.html)
 
 If any of those words look scary, don't worry — your AI can handle all of this for you using the prompt at the top.
@@ -169,13 +169,31 @@ Clone the repo, then:
 pip install -r requirements.txt
 ```
 
+On macOS, install the native audio prerequisites first:
+
+```bash
+brew install python@3.11 portaudio ffmpeg
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install -U pip
+python -m pip install -r requirements.txt
+```
+
 ### PortAudio
 
 `pip install pyaudio` usually just works on Windows. If it complains, grab a wheel from [the unofficial PyAudio wheels page](https://www.lfd.uci.edu/~gohlke/pythonlibs/#pyaudio).
 
+On macOS, install Homebrew `portaudio` before installing Python dependencies:
+
+```bash
+brew install portaudio
+```
+
 ### ffmpeg
 
 `winget install Gyan.FFmpeg`, or download from [ffmpeg.org](https://ffmpeg.org/download.html). Make sure it's on your PATH, or set the `VOICE_FFMPEG_PATH` environment variable to point at it.
+
+On macOS, `brew install ffmpeg` is enough for the listener stack. The Python MCP fallback uses macOS `afplay` directly for generated MP3 speech, so it does not need `simpleaudio` for playback there.
 
 > Setting up on Linux? The upstream [`AIWander/voice`](https://github.com/AIWander/voice) repo has a Linux fork with the equivalent install steps.
 
@@ -189,7 +207,11 @@ Start the voice server:
 python voice_server.py
 ```
 
-It runs at `http://localhost:5123`. You can also just double-click `START_VOICE_SERVER.bat`.
+It runs at `http://localhost:5123`. On Windows, you can also just double-click `START_VOICE_SERVER.bat`. On macOS, run:
+
+```bash
+./START_VOICE_SERVER.sh
+```
 
 You mostly won't touch the endpoints directly — the AI calls them for you — but here they are:
 
@@ -260,11 +282,11 @@ It looks for config in this order:
 - `listen_for_speech` — listen for what the user says
 - `start_voice_mode` — kick off a back-and-forth conversation
 
-For everyday use, there's a Rust version of that wrapper (`voice-mcp.exe`) that's faster and more stable. It comes as release downloads (ARM64 + x64). The Python `server.py` works as a fallback if you'd rather not use the binary.
+For everyday use, there's a Rust version of that wrapper (`voice-mcp.exe` on Windows, `voice-mcp` on macOS) that's faster and more stable. Windows builds come as release downloads (ARM64 + x64), and the release workflow is set up to publish macOS Intel + Apple Silicon builds on future tags. The Python `server.py` works as a fallback if you'd rather not use the binary.
 
 ### Config snippets per client
 
-Copy the snippet for your AI client into the file path shown. `install.ps1` does the wiring for you on JSON clients — these snippets are the fallback if it can't reach the file (or if you'd rather edit by hand). The snippets below use `C:\Users\YOUR-USER\AppData\Local\CPC\servers\voice-mcp.exe`; replace `YOUR-USER` with your Windows username, or use the exact path printed by `install.ps1`.
+Copy the snippet for your AI client into the file path shown. `install.ps1` does the wiring for you on JSON clients — these snippets are the fallback if it can't reach the file (or if you'd rather edit by hand). The snippets below use `C:\Users\YOUR-USER\AppData\Local\CPC\servers\voice-mcp.exe`; replace `YOUR-USER` with your Windows username, or use the exact path printed by `install.ps1`. On macOS, point the command to your built or downloaded `voice-mcp` binary, for example `/usr/local/bin/voice-mcp`.
 
 #### Claude Code — `%USERPROFILE%\.claude\mcp.json`
 
@@ -356,9 +378,9 @@ cd voice-mcp
 cargo build --release
 ```
 
-The compiled binary lands in `voice-mcp/target/release/voice-mcp.exe`. Move it wherever you like and point `claude_desktop_config.json` at it.
+The compiled binary lands in `voice-mcp/target/release/voice-mcp.exe` on Windows and `voice-mcp/target/release/voice-mcp` on macOS. Move it wherever you like and point `claude_desktop_config.json` at it.
 
-You'll need a [Rust toolchain](https://rustup.rs/) installed. Building takes a couple of minutes on a modern machine. The release workflow on tag push builds both ARM64 and x64 Windows binaries automatically.
+You'll need a [Rust toolchain](https://rustup.rs/) installed. Building takes a couple of minutes on a modern machine. The release workflow on tag push builds ARM64 and x64 binaries for Windows and macOS automatically.
 
 ---
 

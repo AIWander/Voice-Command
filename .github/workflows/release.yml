@@ -11,15 +11,23 @@ permissions:
 jobs:
   build:
     name: Build ${{ matrix.target }}
-    runs-on: windows-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - target: x86_64-pc-windows-msvc
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
             artifact: voice-mcp-x64.exe
-          - target: aarch64-pc-windows-msvc
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
             artifact: voice-mcp-arm64.exe
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact: voice-mcp-darwin-x64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: voice-mcp-darwin-arm64
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -30,7 +38,12 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
       - name: Rename artifact
         shell: bash
-        run: mv voice-mcp/target/${{ matrix.target }}/release/voice-mcp.exe ${{ matrix.artifact }}
+        run: |
+          src="voice-mcp/target/${{ matrix.target }}/release/voice-mcp"
+          if [[ "${{ matrix.target }}" == *windows* ]]; then
+            src="${src}.exe"
+          fi
+          mv "$src" "${{ matrix.artifact }}"
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
@@ -63,7 +76,7 @@ jobs:
         #     --certificate-identity-regexp 'https://github.com/AIWander/Voice-Command/.*' \
         #     --certificate-oidc-issuer https://token.actions.githubusercontent.com <f>
         run: |
-          for f in *.exe SHA256SUMS; do
+          for f in voice-mcp-* SHA256SUMS; do
             cosign sign-blob --yes "$f" \
               --output-signature "$f.sig" \
               --output-certificate "$f.pem"
@@ -72,7 +85,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           files: |
-            dist/*.exe
+            dist/voice-mcp-*
             dist/SHA256SUMS
             dist/*.sig
             dist/*.pem
