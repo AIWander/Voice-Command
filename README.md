@@ -234,6 +234,10 @@ Optional knobs you can pass to `/listen`:
 
 The terminal listener works, but on Windows there's a nicer way: **the Voice App**. One small window replaces the terminal entirely and handles both halves of the conversation:
 
+<p align="center">
+  <img src="docs/voice-app.png" alt="The Voice App, paused mid-playback — amber paused banner, Resume button, and the live transcript" width="360">
+</p>
+
 ```
 START_VOICE_APP.bat
 ```
