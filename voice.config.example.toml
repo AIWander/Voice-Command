@@ -43,10 +43,10 @@ listen_timeout_secs = 120
 beam_size = 5
 
 [playback]
-# Voice App (voice_app.py, Windows) playback engine. "auto" tries winsdk —
-# a native Windows media session, so your headset play/pause button is
-# routed by the OS — and falls back to a PowerShell-hosted player with a
-# global media-key hook. Options: auto | winsdk | subproc
+# Voice App (voice_app.py) playback engine. "auto" chooses the native backend:
+# Windows tries winsdk (SMTC headset controls) and falls back to a PowerShell
+# player with a media-key hook; macOS uses AVAudioPlayer + MPRemoteCommandCenter
+# through PyObjC. Options: auto | winsdk | subproc | darwin
 backend = "auto"
 # In subproc mode, capture the play/pause media key while audio is active
 media_key_hook = true

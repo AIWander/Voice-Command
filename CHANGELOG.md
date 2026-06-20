@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - New `playback_control` MCP tool: `pause | resume | toggle | skip | stop | status`.
 - `voice.config.example.toml`: new `[playback]` section (backend, media-key hook, always-on-top) and `[listen] beam_size` (Whisper beam width, default 5).
 - `requirements.txt`: `winsdk` on Windows for the native media session.
+- Experimental macOS Voice App backend: `voice_app.py` can now start on Darwin using PyObjC `AVAudioPlayer` playback plus `MPNowPlayingInfoCenter` / `MPRemoteCommandCenter` hooks for pause/resume media controls.
 - CI compile check now covers `voice_app.py`.
 
 - Experimental macOS bootstrap support (#23 by @LeonidasZhak): `START_VOICE_SERVER.sh` launcher, Homebrew install notes, `afplay` playback on Darwin for both the Python MCP fallback and the Rust wrapper, macOS CI legs, and Darwin release targets. The terminal listening server remains the supported path on macOS.

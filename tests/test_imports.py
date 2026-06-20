@@ -74,5 +74,12 @@ class TestVoiceServerCompiles(unittest.TestCase):
         py_compile.compile(path, doraise=True)
 
 
+class TestVoiceAppCompiles(unittest.TestCase):
+    def test_voice_app_compiles(self):
+        """voice_app.py is valid Python syntax."""
+        path = os.path.join(ROOT, "voice_app.py")
+        py_compile.compile(path, doraise=True)
+
+
 if __name__ == "__main__":
     unittest.main()

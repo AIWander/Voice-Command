@@ -6,5 +6,8 @@ edge-tts>=6.1
 pydub>=0.25
 simpleaudio>=1.0; platform_system != "Darwin"
 winsdk>=1.0; platform_system == "Windows"
+pyobjc-framework-AVFoundation>=11.0; platform_system == "Darwin"
+pyobjc-framework-Cocoa>=11.0; platform_system == "Darwin"
+pyobjc-framework-MediaPlayer>=11.0; platform_system == "Darwin"
 nest-asyncio>=1.6
 mcp>=1.0

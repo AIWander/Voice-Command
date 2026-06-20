@@ -19,6 +19,8 @@ Playback backends (auto-selected):
                low-level keyboard hook for VK_MEDIA_PLAY_PAUSE. The hook only
                swallows the key while our audio is active; otherwise it
                passes through so other media apps keep working.
+  3. darwin  — AVAudioPlayer via PyObjC, with MPRemoteCommandCenter and
+               MPNowPlayingInfoCenter integration for macOS media controls.
 
 HTTP API on http://localhost:5123
   GET  /status            health + features
@@ -29,8 +31,6 @@ HTTP API on http://localhost:5123
   POST /listen?...        record + transcribe (waits for playback queue to drain first)
 """
 
-import ctypes
-import ctypes.wintypes
 import json
 import os
 import queue
@@ -48,6 +48,10 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import numpy as np
+
+if sys.platform == "win32":
+    import ctypes
+    import ctypes.wintypes
 
 APP_NAME = "CPC Voice"
 APP_VERSION = "3.0"
@@ -409,7 +413,219 @@ class SubprocPlayer:
             pass
 
 
+# ═══════════════════════════════════════════════════════════════════
+# PLAYBACK BACKEND 3: macOS AVAudioPlayer + MediaPlayer remote commands
+# ═══════════════════════════════════════════════════════════════════
+class DarwinPlayer:
+    """macOS native player. AVAudioPlayer gives us pause/resume/progress;
+    MediaPlayer registers Now Playing + play/pause remote commands when
+    PyObjC exposes the macOS framework bindings."""
+    name = "darwin"
+
+    def __init__(self):
+        from AVFoundation import AVAudioPlayer
+        from Foundation import NSURL
+
+        self._AVAudioPlayer = AVAudioPlayer
+        self._NSURL = NSURL
+        self._lock = threading.RLock()
+        self._player = None
+        self._ended = threading.Event()
+        self._paused = False
+        self._last_text = ""
+        self._remote_targets = []
+        self._remote_center = None
+        self._now_playing_center = None
+        self._mp = None
+        self._install_media_session()
+
+    def _install_media_session(self):
+        try:
+            import MediaPlayer as mp
+            from AppKit import NSApplication
+
+            # Ensure there is an NSApplication instance before registering
+            # MediaPlayer handlers. Tk will own the visible UI loop later.
+            NSApplication.sharedApplication()
+            self._mp = mp
+            self._remote_center = mp.MPRemoteCommandCenter.sharedCommandCenter()
+            self._now_playing_center = mp.MPNowPlayingInfoCenter.defaultCenter()
+        except Exception as e:
+            log(f"macOS media-session integration unavailable ({e}); playback still works")
+            return
+
+        status_success = getattr(self._mp, "MPRemoteCommandHandlerStatusSuccess", 0)
+
+        def play_handler(_event):
+            self.resume()
+            return status_success
+
+        def pause_handler(_event):
+            self.pause()
+            return status_success
+
+        def toggle_handler(_event):
+            self._toggle_from_remote()
+            return status_success
+
+        commands = [
+            ("play", self._remote_center.playCommand(), play_handler),
+            ("pause", self._remote_center.pauseCommand(), pause_handler),
+            ("toggle", self._remote_center.togglePlayPauseCommand(), toggle_handler),
+        ]
+        for name, command, handler in commands:
+            try:
+                command.setEnabled_(True)
+                token = command.addTargetWithHandler_(handler)
+                self._remote_targets.append((command, token))
+            except Exception as e:
+                log(f"macOS remote command {name!r} unavailable ({e})")
+        if self._remote_targets:
+            log("macOS media session installed (MPRemoteCommandCenter play/pause)")
+
+    def _toggle_from_remote(self):
+        with self._lock:
+            if self._player is None:
+                return
+            if self._player.isPlaying():
+                self.pause()
+            else:
+                self.resume()
+
+    def _init_player(self, path):
+        url = self._NSURL.fileURLWithPath_(str(Path(path).resolve()))
+        created = self._AVAudioPlayer.alloc().initWithContentsOfURL_error_(url, None)
+        if isinstance(created, tuple):
+            player, err = created
+        else:
+            player, err = created, None
+        if player is None:
+            raise RuntimeError(f"AVAudioPlayer failed to load {path}: {err}")
+        player.setNumberOfLoops_(0)
+        player.prepareToPlay()
+        return player
+
+    def _position_duration_unlocked(self):
+        if self._player is None:
+            return 0, 0
+        pos = int(max(0.0, float(self._player.currentTime())) * 1000)
+        dur = int(max(0.0, float(self._player.duration())) * 1000)
+        return pos, dur
+
+    def _set_now_playing_unlocked(self):
+        if self._now_playing_center is None or self._mp is None:
+            return
+        try:
+            pos, dur = self._position_duration_unlocked()
+            title = (self._last_text or "Claude response")[:80]
+            rate = 1.0 if self._player is not None and self._player.isPlaying() else 0.0
+            info = {
+                self._mp.MPMediaItemPropertyTitle: title,
+                self._mp.MPMediaItemPropertyArtist: APP_NAME,
+                self._mp.MPMediaItemPropertyPlaybackDuration: dur / 1000.0,
+                self._mp.MPNowPlayingInfoPropertyElapsedPlaybackTime: pos / 1000.0,
+                self._mp.MPNowPlayingInfoPropertyPlaybackRate: rate,
+            }
+            self._now_playing_center.setNowPlayingInfo_(info)
+        except Exception as e:
+            log(f"macOS Now Playing update skipped: {e}")
+
+    def load_and_play(self, path, volume, text=""):
+        with self._lock:
+            self._ended.clear()
+            self._paused = False
+            self._last_text = text
+            self._player = self._init_player(path)
+            self._player.setVolume_(max(0.0, min(1.0, float(volume))))
+            self._set_now_playing_unlocked()
+            if not self._player.play():
+                raise RuntimeError(f"AVAudioPlayer failed to start {path}")
+
+    def pause(self):
+        with self._lock:
+            if self._player is None or self._ended.is_set():
+                return
+            self._player.pause()
+            self._paused = True
+            self._set_now_playing_unlocked()
+
+    def resume(self):
+        with self._lock:
+            if self._player is None or self._ended.is_set():
+                return
+            if not self._player.play():
+                raise RuntimeError("AVAudioPlayer failed to resume")
+            self._paused = False
+            self._set_now_playing_unlocked()
+
+    def stop(self):
+        with self._lock:
+            if self._player is not None:
+                try:
+                    self._player.stop()
+                    self._player.setCurrentTime_(0.0)
+                except Exception:
+                    pass
+            self._paused = False
+            self._ended.set()
+            self._set_now_playing_unlocked()
+
+    def poll(self):
+        with self._lock:
+            if self._player is None:
+                return ("ended", 0, 0, True, None)
+            try:
+                playing = bool(self._player.isPlaying())
+                pos, dur = self._position_duration_unlocked()
+                if not self._paused and not playing and dur > 0 and pos >= max(0, dur - 150):
+                    self._ended.set()
+                ended = self._ended.is_set()
+                if ended:
+                    return ("ended", pos, dur, True, None)
+                state = "paused" if self._paused else ("playing" if playing else "opening")
+                self._set_now_playing_unlocked()
+                return (state, pos, dur, False, None)
+            except Exception as e:
+                return ("error", 0, 0, True, str(e))
+
+    def close(self):
+        with self._lock:
+            self.stop()
+            for command, token in self._remote_targets:
+                try:
+                    command.removeTarget_(token)
+                except Exception:
+                    pass
+            try:
+                if self._now_playing_center is not None:
+                    self._now_playing_center.setNowPlayingInfo_(None)
+            except Exception:
+                pass
+
+
 def make_player(backend_pref):
+    if sys.platform == "darwin":
+        if backend_pref not in ("auto", "darwin"):
+            raise RuntimeError(
+                f"Playback backend {backend_pref!r} is not available on macOS; "
+                "use 'auto' or 'darwin'."
+            )
+        try:
+            p = DarwinPlayer()
+            log("Playback backend: darwin (AVAudioPlayer + MPRemoteCommandCenter)")
+            return p
+        except Exception as e:
+            raise RuntimeError(
+                "macOS Voice App playback requires PyObjC. Install requirements.txt "
+                "or pip install pyobjc-framework-AVFoundation pyobjc-framework-MediaPlayer."
+            ) from e
+
+    if sys.platform != "win32":
+        raise RuntimeError(f"The Voice App has no playback backend for {sys.platform!r}.")
+
+    if backend_pref == "darwin":
+        raise RuntimeError("Playback backend 'darwin' is only available on macOS.")
+
     if backend_pref in ("auto", "winsdk"):
         try:
             p = WinsdkPlayer()
@@ -1181,12 +1397,10 @@ def run_ui(always_on_top):
 # ═══════════════════════════════════════════════════════════════════
 def main():
     global MANAGER
-    if sys.platform != "win32":
+    if sys.platform not in ("win32", "darwin"):
         print(
-            "The Voice App window is currently Windows-only — it uses Windows\n"
-            "media sessions (SMTC) for native headset pause/resume.\n"
-            "On macOS, run ./START_VOICE_SERVER.sh for the terminal listening\n"
-            "server instead (see README → Platform support)."
+            "The Voice App currently supports Windows and experimental macOS only.\n"
+            "On Linux, use the terminal listening server path for now."
         )
         sys.exit(1)
     log(f"{APP_NAME} v{APP_VERSION} starting (config: {VOICE_CONFIG_PATH})")

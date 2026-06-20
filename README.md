@@ -20,7 +20,7 @@ Text-to-speech currently uses `edge-tts`, which calls Microsoft Edge's online TT
 
 ## 🖥️ Platform support
 
-**Windows is the primary supported platform** (x64 and ARM64), and it now gets the **Voice App** — a single window that handles speech playback *and* listening, with pause/resume from your headset button. See [The Voice App](#the-voice-app-windows) below. **macOS** has an experimental source install path: the Python listener runs with Homebrew `portaudio`, `server.py` uses the built-in `afplay` player for TTS playback, and the Rust `voice-mcp` wrapper builds on both Intel and Apple Silicon — macOS uses the terminal listening server rather than the Voice App for now. For **Linux**, see the upstream [`AIWander/voice`](https://github.com/AIWander/voice) repo — there's a community fork there with Linux support.
+**Windows is the primary supported platform** (x64 and ARM64), and it gets the **Voice App** — a single window that handles speech playback *and* listening, with pause/resume from your headset button. See [The Voice App](#the-voice-app) below. **macOS** has an experimental source install path: the Python listener runs with Homebrew `portaudio`, `server.py` uses the built-in `afplay` player for fallback TTS playback, the Rust `voice-mcp` wrapper builds on both Intel and Apple Silicon, and `voice_app.py` can run experimentally with a PyObjC `AVAudioPlayer` backend. For **Linux**, see the upstream [`AIWander/voice`](https://github.com/AIWander/voice) repo — there's a community fork there with Linux support.
 
 ---
 
@@ -230,12 +230,20 @@ Optional knobs you can pass to `/listen`:
 
 ---
 
-## The Voice App (Windows)
+## The Voice App
 
-The terminal listener works, but on Windows there's a nicer way: **the Voice App**. One small window replaces the terminal entirely and handles both halves of the conversation:
+The terminal listener works, but on Windows and experimentally on macOS there's a nicer way: **the Voice App**. One small window replaces the terminal entirely and handles both halves of the conversation:
+
+On Windows:
 
 ```
 START_VOICE_APP.bat
+```
+
+On macOS, after installing the source dependencies:
+
+```bash
+python voice_app.py
 ```
 
 What you get:
@@ -245,11 +253,11 @@ What you get:
 - **The AI keeps working while you listen.** Speech is queued and played in the background, so the AI can keep using tools — or even finish its whole response — while you're still hearing it.
 - **Status at a glance**: speaking / paused / listening state, playback progress, live mic level, and a color-coded transcript of the conversation.
 
-It works on both **x64 and ARM64** Windows (on ARM64, build the `.venv` from x64 Python 3.11 — same note as the listener, `ctranslate2` doesn't ship ARM64 wheels). Native media-session support uses the `winsdk` package; if it isn't available the app falls back to an equivalent player with a media-key hook, and everything still works.
+It works on both **x64 and ARM64** Windows (on ARM64, build the `.venv` from x64 Python 3.11 — same note as the listener, `ctranslate2` doesn't ship ARM64 wheels). Native Windows media-session support uses the `winsdk` package; if it isn't available the app falls back to an equivalent player with a media-key hook, and everything still works. On macOS, the experimental app path uses PyObjC with `AVAudioPlayer`, `MPNowPlayingInfoCenter`, and `MPRemoteCommandCenter`; real headset-button behavior still needs verification on Apple hardware.
 
 The app serves the same `http://localhost:5123` API as the terminal listener (so the MCP wrapper auto-detects it), plus playback endpoints: `POST /say`, `/pause`, `/resume`, `/toggle`, `/skip`, `/stop`, and `GET /playback`.
 
-On macOS, stick with `./START_VOICE_SERVER.sh` — the Voice App's media-session integration is Windows-only for now.
+On macOS, `./START_VOICE_SERVER.sh` remains the conservative terminal path. Use `python voice_app.py` when you want to try the experimental app path with pause/resume playback controls.
 
 ---
 
