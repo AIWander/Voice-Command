@@ -88,18 +88,20 @@ footer a:hover{color:var(--accent)}
 
   <div class="section-label">What it is</div>
   <article>
-    <p>You talk, your AI does the thing. Whatever your AI can do typed — search the web, check your calendar, send an email through your connectors, write code, edit files on your computer, kick off automations — you can now ask for out loud. And it narrates back what it's doing as it goes, so you don't have to look at the screen.</p>
-    <p>The voice layer doesn't add new capabilities. It just changes how you reach the ones your AI already has. Same connectors. Same MCPs. Same tools. You're just using your mouth instead of your keyboard.</p>
+    <p>You talk, your AI does the thing. Voice adds no new privileges; it only invokes tools the user has already installed and enabled. Sensitive actions should require confirmation. If your AI can do it typed, you can ask for it spoken.</p>
+    <p>The voice layer doesn't add new capabilities. It just changes how you reach the ones your AI already has. Same connectors. Same MCPs. Same tools. Same permission boundaries. You're just using your mouth instead of your keyboard.</p>
 
     <h2>What stays local</h2>
     <p>Microphone capture, speech-to-text, silence detection, noise filtering, emotion detection, and audio playback run on your machine. The listening server binds to <code>localhost:5123</code>, not your LAN. Text-to-speech currently uses <code>edge-tts</code>, which calls Microsoft Edge's online TTS service. Your AI still reaches out for its own model calls (Claude pings Anthropic, ChatGPT pings OpenAI), and tools it calls might too (web search, email connectors). For a fully offline loop, pair this with a local model and replace <code>edge-tts</code> with a local TTS backend.</p>
+    <h2>Safe Use / Permission Model</h2>
+    <p>AIWander tools are local, user-authorized MCP capability surfaces. They do not grant an AI new permissions by themselves. They expose tools the user explicitly installs and enables. Sensitive actions should be confirmed by the user, credentials should stay in the OS keyring or local vault, and demos should use mock data.</p>
   </article>
 
   <div class="section-label">How a turn works</div>
   <article>
     <ol class="flow">
       <li><strong>You hear a series of beeps.</strong> That's the AI's "I'm listening, your turn" cue.</li>
-      <li><strong>You talk.</strong> Anything your AI has the tools to handle counts.</li>
+      <li><strong>You talk.</strong> Anything your AI has the tools and authorization to handle counts.</li>
       <li><strong>The AI works — and tells you out loud what it's doing as it goes.</strong> ("Checking your calendar… found three events tomorrow… drafting the reply…")</li>
       <li><strong>You hear the beeps again.</strong> The AI's done with that turn. Your move.</li>
     </ol>

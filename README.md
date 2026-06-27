@@ -4,7 +4,7 @@
 
 **Talk to your AI. Hear it work.**
 
-Voice-Command lets you voice-control your AI end-to-end. You say what you want done — Claude chat or another AI does it, using whatever tools, connectors, and MCPs it has access to — and narrates what it's doing as it goes. The "Command" isn't a euphemism. **Anything the AI can do, you can ask for out loud:** search the web, check your calendar, send email through your connectors, write or fix code, edit files on your computer, run shell commands, kick off automations. If it can do it typed, you can do it spoken.
+Voice-Command lets you voice-control your AI end-to-end. You say what you want done — Claude chat or another AI does it, using whatever tools, connectors, and MCPs it has access to — and narrates what it's doing as it goes. Voice adds no new privileges; it only invokes tools the user has already installed and enabled. Sensitive actions should require confirmation. If it can do it typed, you can ask for it spoken.
 
 Under the hood it uses [faster-whisper](https://github.com/SYSTRAN/faster-whisper) to understand what you say (running fully on your own computer — your voice doesn't go to the cloud) and [edge-tts](https://github.com/rany2/edge-tts) to speak responses back through Microsoft Edge's online text-to-speech service. It also reads the *feel* of how you say things — excited, hesitant, frustrated — and passes that along so the AI can respond more naturally.
 
@@ -15,6 +15,10 @@ Under the hood it uses [faster-whisper](https://github.com/SYSTRAN/faster-whispe
 Voice-Command's microphone capture, speech-to-text, silence detection, noise filtering, emotion detection, and audio playback run on your machine. The listening server binds to `localhost:5123`, not your LAN.
 
 Text-to-speech currently uses `edge-tts`, which calls Microsoft Edge's online TTS service. Your AI may also reach out for its own model calls (Claude pings Anthropic, ChatGPT pings OpenAI, and so on), and tools it calls might reach out too (web search, email connectors). For a fully offline loop, pair this with a local model and replace `edge-tts` with a local TTS backend.
+
+## Safe Use / Permission Model
+
+AIWander tools are local, user-authorized MCP capability surfaces. They do not grant an AI new permissions by themselves. They expose tools the user explicitly installs and enables. Sensitive actions should be confirmed by the user, credentials should stay in the OS keyring or local vault, and demos should use mock data.
 
 ---
 
@@ -43,7 +47,7 @@ It doesn't care which model is on the other end. If your AI of choice can call M
 ## How a turn works
 
 1. **You hear a series of beeps.** That's the AI's "I'm listening, your turn" cue.
-2. **You talk.** Say what you want done. Anything your AI has the tools to handle counts.
+2. **You talk.** Say what you want done. Anything your AI has the tools and authorization to handle counts.
 3. **The AI works — and tells you out loud what it's doing as it goes.** ("Checking your calendar… found three events tomorrow… drafting the reply…")
 4. **You hear the beeps again.** The AI's done with that turn. Your move.
 
@@ -65,8 +69,8 @@ Anything your AI has the tools to do. A few examples to give you the shape of it
 - *"Search the web for the latest on [topic] and summarize."* → uses web search
 - *"Read me the README in this folder."* → uses local filesystem
 - *"Find the file we were editing yesterday and fix the bug we talked about."* → uses filesystem + memory of past chats
-- *"Send an email to Sarah saying I'll be ten minutes late."* → uses your Gmail connector
-- *"Run the deploy script and tell me when it's done."* → uses shell access
+- *"Draft an email to Sarah saying I'll be ten minutes late and ask me before sending."* → uses your email connector
+- *"Run the test script and tell me when it's done."* → uses shell access
 
 The voice layer doesn't add capabilities — it just changes how you reach them. Whatever connectors, MCPs, and tools you've already hooked up to your AI all work the same. You're just using your mouth instead of your keyboard. Treat voice commands the same way you treat typed commands: if your AI has tools that can send email, edit files, run shell commands, or trigger automations, those tools can also be invoked by speech.
 
