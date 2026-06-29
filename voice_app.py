@@ -438,6 +438,7 @@ class PlaybackManager:
         self._stop_all = threading.Event()
         self._pause_requested = threading.Event()
         self._active = threading.Event()   # an item is loaded/playing/paused
+        self._play_state = "idle"          # real player state from poll: playing|paused|idle
         self.worker = threading.Thread(target=self._run, daemon=True, name="playback")
         self.worker.start()
 
@@ -477,12 +478,45 @@ class PlaybackManager:
             self.player.stop()
 
     def stop_all(self):
-        self._stop_all.set()
+        """Clear the whole queue and stop the current item immediately. Drains
+        the queue DIRECTLY (no sticky flag) so a later enqueue is not swallowed
+        — the old _stop_all flag lingered after the worker went idle and ate
+        the next /say."""
+        try:
+            while True:
+                self._cleanup(self.queue.get_nowait())
+        except queue.Empty:
+            pass
+        STATE.set(queue_len=0)
+        self._pause_requested.clear()
         self.skip()
 
     def busy(self):
-        """True while audio is queued, playing, or paused — the listen gate."""
+        """True while audio is queued, playing, or paused."""
         return self._active.is_set() or not self.queue.empty()
+
+    def is_paused(self):
+        """True when the underlying player is paused — works whether the pause
+        came from the in-app button, the media-key hook, OR the headset button
+        routed by Windows (SMTC), because it reads the real polled player state
+        rather than a flag only our own pause() sets."""
+        return self._play_state == "paused"
+
+    def gate_should_wait(self):
+        """Listen gate: wait only while audio is ACTIVELY playing or queued.
+        A PAUSED item does NOT hold the gate. On a headset the single
+        play/pause button is how the user grabs the floor, so a pause must let
+        the mic open (barge-in) instead of deadlocking behind audio that will
+        never finish on its own."""
+        if self._play_state == "paused":
+            return False
+        return self._active.is_set() or not self.queue.empty()
+
+    def barge_in(self):
+        """User took the floor mid-playback (pause): drop the current + queued
+        items so the mic opens and the next reply isn't stuck behind stale
+        audio. Same mechanism as stop_all (drain + skip, no sticky flag)."""
+        self.stop_all()
 
     # -- worker ------------------------------------------------------
     def _run(self):
@@ -506,6 +540,7 @@ class PlaybackManager:
                 STATE.set(last_error=str(e))
             finally:
                 self._active.clear()
+                self._play_state = "idle"
                 self._cleanup(item)
                 if self.queue.empty():
                     STATE.set(state=AppState.IDLE, current_text="",
@@ -513,6 +548,7 @@ class PlaybackManager:
 
     def _play_item(self, item):
         log(f"Playing #{item['id']}: {item['text'][:60]!r}")
+        self._pause_requested.clear()  # each new item starts unpaused
         STATE.set(state=AppState.SPEAKING, current_text=item["text"] or "(audio)")
         self.player.load_and_play(item["path"], item["volume"], item["text"])
         while True:
@@ -520,6 +556,7 @@ class PlaybackManager:
                 log(f"Skipped #{item['id']}")
                 break
             st, pos, dur, ended, err = self.player.poll()
+            self._play_state = st  # track real player state for the listen gate
             if err:
                 STATE.set(last_error=err)
             if ended:
@@ -966,19 +1003,29 @@ class VoiceHandler(BaseHTTPRequestHandler):
         self.send_json({'success': True, 'id': pid, 'queued': True})
 
     def handle_listen(self, params):
-        # THE GATE: wait for the playback queue to fully drain (pause stalls
-        # this indefinitely) before beeping and recording. This is what makes
-        # "switch back to listening" trigger on playback end, not output end.
+        # THE GATE: wait for ACTIVE playback to finish before beeping and
+        # recording, so "switch back to listening" triggers on playback end,
+        # not output end. EXCEPTION — a paused item does NOT hold the gate: a
+        # pause is the user taking the floor (especially the headset button),
+        # so we barge in, drop the remaining audio, and open the mic instead of
+        # deadlocking behind audio that will never finish on its own.
         gate_start = time.time()
         gated = False
-        while MANAGER.busy():
+        while MANAGER.gate_should_wait():
             gated = True
             if time.time() - gate_start > LISTEN_GATE_MAX_SECS:
                 self.send_json({'success': False,
-                                'error': 'listen gate timeout: playback still active/paused'})
+                                'error': 'listen gate timeout: playback still active'})
                 return
             time.sleep(0.1)
-        if gated:
+        if MANAGER.is_paused():
+            log("Pause detected — barge-in: dropping remaining playback, opening mic")
+            MANAGER.barge_in()
+            t0 = time.time()
+            while MANAGER._active.is_set() and time.time() - t0 < 2:
+                time.sleep(0.05)
+            time.sleep(0.3)  # let stopped audio flush before the mic opens
+        elif gated:
             log(f"Listen gate held {time.time() - gate_start:.1f}s for playback to finish")
             time.sleep(0.25)  # small breath between Claude's audio and the beep
 
