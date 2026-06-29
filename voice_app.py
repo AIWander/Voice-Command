@@ -68,6 +68,7 @@ DEFAULT_SILENCE_TIMEOUT = 4.0
 DEFAULT_RMS_THRESHOLD = 100
 DEFAULT_MIN_SPEECH_DURATION = 3.0
 LISTEN_GATE_MAX_SECS = 1800  # absolute cap on how long /listen waits for playback
+MIN_LISTEN_FLOOR_SECS = 5.0  # the mic always records at least this long once it opens
 
 END_PHRASES = [
     'send this', 'send it', 'done', "that's it", 'stop', 'exit',
@@ -439,10 +440,12 @@ class PlaybackManager:
         self._pause_requested = threading.Event()
         self._active = threading.Event()   # an item is loaded/playing/paused
         self._play_state = "idle"          # real player state from poll: playing|paused|idle
+        self._stop_exchange = threading.Event()  # set by /stop to end the speak<->listen loop
         self.worker = threading.Thread(target=self._run, daemon=True, name="playback")
         self.worker.start()
 
     def enqueue(self, path, text, volume, delete_after=True):
+        self._stop_exchange.clear()  # a new utterance means the exchange is live
         with self._id_lock:
             pid = self._next_id
             self._next_id += 1
@@ -477,11 +480,9 @@ class PlaybackManager:
             self._skip.set()
             self.player.stop()
 
-    def stop_all(self):
-        """Clear the whole queue and stop the current item immediately. Drains
-        the queue DIRECTLY (no sticky flag) so a later enqueue is not swallowed
-        — the old _stop_all flag lingered after the worker went idle and ate
-        the next /say."""
+    def _drain_and_skip(self):
+        """Drop every queued item and stop the current one. Drains the queue
+        DIRECTLY (no sticky flag) so a later enqueue is not swallowed."""
         try:
             while True:
                 self._cleanup(self.queue.get_nowait())
@@ -491,32 +492,49 @@ class PlaybackManager:
         self._pause_requested.clear()
         self.skip()
 
+    def interrupt(self):
+        """User grabbed the floor ("my turn"): end the current speech and drop
+        the queue so the pending /listen can proceed (beep + record). The
+        speak<->listen exchange CONTINUES. Besides a natural finish, this is the
+        only thing that opens the mic — a pause does NOT."""
+        self._drain_and_skip()
+
+    def stop_all(self):
+        """End the whole voice exchange: drop all audio AND signal any pending
+        /listen to return 'stopped' so the speak<->listen loop ends."""
+        self._stop_exchange.set()
+        self._drain_and_skip()
+
+    def barge_in(self):
+        """Back-compat alias for interrupt (older callers / Rust 'skip')."""
+        self.interrupt()
+
     def busy(self):
         """True while audio is queued, playing, or paused."""
         return self._active.is_set() or not self.queue.empty()
 
     def is_paused(self):
-        """True when the underlying player is paused — works whether the pause
-        came from the in-app button, the media-key hook, OR the headset button
-        routed by Windows (SMTC), because it reads the real polled player state
-        rather than a flag only our own pause() sets."""
+        """True when the underlying player is paused — reads the real polled
+        player state, so it catches in-app, media-key-hook, AND headset/SMTC
+        pauses uniformly."""
         return self._play_state == "paused"
 
     def gate_should_wait(self):
-        """Listen gate: wait only while audio is ACTIVELY playing or queued.
-        A PAUSED item does NOT hold the gate. On a headset the single
-        play/pause button is how the user grabs the floor, so a pause must let
-        the mic open (barge-in) instead of deadlocking behind audio that will
-        never finish on its own."""
-        if self._play_state == "paused":
-            return False
+        """Listen gate: hold the mic CLOSED while audio is playing, PAUSED, or
+        queued. A pause is a HOLD, not a hand-off — the mic opens only when the
+        speech finishes naturally (the file closes) or the user hits Interrupt
+        (which drains the queue, so this then returns False)."""
         return self._active.is_set() or not self.queue.empty()
 
-    def barge_in(self):
-        """User took the floor mid-playback (pause): drop the current + queued
-        items so the mic opens and the next reply isn't stuck behind stale
-        audio. Same mechanism as stop_all (drain + skip, no sticky flag)."""
-        self.stop_all()
+    def exchange_stopped(self):
+        """True after /stop until the next utterance — tells a gating /listen
+        to bail so the speak<->listen loop ends."""
+        return self._stop_exchange.is_set()
+
+    def clear_stop(self):
+        """Consume the stop signal once a /listen has acted on it, so it can't
+        leak into the next listen."""
+        self._stop_exchange.clear()
 
     # -- worker ------------------------------------------------------
     def _run(self):
@@ -961,10 +979,13 @@ class VoiceHandler(BaseHTTPRequestHandler):
         elif path == '/toggle':
             result = MANAGER.toggle()
             self.send_json({'success': True, 'action': result, **STATE.snapshot()})
-        elif path == '/skip':
-            MANAGER.skip()
-            self.send_json({'success': True, 'action': 'skip', **STATE.snapshot()})
+        elif path == '/interrupt' or path == '/skip':
+            # "My turn" — end current speech + drop the queue so the pending
+            # /listen opens the mic. A pause does NOT do this; it only holds.
+            MANAGER.interrupt()
+            self.send_json({'success': True, 'action': 'interrupt', **STATE.snapshot()})
         elif path == '/stop':
+            # End the whole exchange — also tells a pending /listen to bail.
             MANAGER.stop_all()
             self.send_json({'success': True, 'action': 'stop', **STATE.snapshot()})
         else:
@@ -1003,31 +1024,34 @@ class VoiceHandler(BaseHTTPRequestHandler):
         self.send_json({'success': True, 'id': pid, 'queued': True})
 
     def handle_listen(self, params):
-        # THE GATE: wait for ACTIVE playback to finish before beeping and
-        # recording, so "switch back to listening" triggers on playback end,
-        # not output end. EXCEPTION — a paused item does NOT hold the gate: a
-        # pause is the user taking the floor (especially the headset button),
-        # so we barge in, drop the remaining audio, and open the mic instead of
-        # deadlocking behind audio that will never finish on its own.
+        # THE GATE: hold the mic closed while audio is playing, PAUSED, or
+        # queued. A pause is a HOLD, not a hand-off — listening begins only when
+        # the speech finishes naturally (the file closes) or the user hits
+        # Interrupt (which drains the queue, releasing the gate). /stop bails
+        # out entirely. The ready-beep lives in capture_voice (the listen side),
+        # so it fires whenever the mic actually opens, however we got here.
         gate_start = time.time()
         gated = False
         while MANAGER.gate_should_wait():
+            if MANAGER.exchange_stopped():
+                MANAGER.clear_stop()
+                self.send_json({'success': False, 'stopped': True,
+                                'error': 'exchange stopped by user'})
+                return
             gated = True
             if time.time() - gate_start > LISTEN_GATE_MAX_SECS:
                 self.send_json({'success': False,
                                 'error': 'listen gate timeout: playback still active'})
                 return
             time.sleep(0.1)
-        if MANAGER.is_paused():
-            log("Pause detected — barge-in: dropping remaining playback, opening mic")
-            MANAGER.barge_in()
-            t0 = time.time()
-            while MANAGER._active.is_set() and time.time() - t0 < 2:
-                time.sleep(0.05)
-            time.sleep(0.3)  # let stopped audio flush before the mic opens
-        elif gated:
-            log(f"Listen gate held {time.time() - gate_start:.1f}s for playback to finish")
-            time.sleep(0.25)  # small breath between Claude's audio and the beep
+        if MANAGER.exchange_stopped():
+            MANAGER.clear_stop()
+            self.send_json({'success': False, 'stopped': True,
+                            'error': 'exchange stopped by user'})
+            return
+        if gated:
+            log(f"Listen gate released after {time.time() - gate_start:.1f}s — opening mic")
+            time.sleep(0.3)  # let any just-stopped audio flush before the beep
 
         cfg = get_listen_defaults()
         timeout = int(params.get('timeout', [60])[0])
@@ -1035,6 +1059,11 @@ class VoiceHandler(BaseHTTPRequestHandler):
         skip_filter = params.get('skip_filter', [str(not cfg["noise_filter_enabled"]).lower()])[0].lower() == 'true'
         silence_timeout = float(params.get('silence_timeout', [cfg["silence_timeout"]])[0])
         min_speech_duration = float(params.get('min_speech_duration', [cfg["min_speech_duration"]])[0])
+        # Always give the user at least MIN_LISTEN_FLOOR_SECS of mic time once it
+        # opens, even if the config floor is shorter, so a short config can't
+        # clip the start of a reply.
+        min_speech_duration = max(min_speech_duration, MIN_LISTEN_FLOOR_SECS)
+        timeout = max(timeout, int(min_speech_duration) + 3)
         rms_threshold = float(params.get('rms_threshold', [cfg["rms_threshold"]])[0])
         result = capture_voice(timeout, skip_emotion, skip_filter,
                                silence_timeout, min_speech_duration, rms_threshold)
@@ -1117,7 +1146,7 @@ def run_ui(always_on_top):
 
     toggle_btn = styled_btn(ctrl, "⏯  Pause", lambda: MANAGER.toggle(), primary=True)
     toggle_btn.pack(side="left", expand=True, fill="x", padx=(0, 6))
-    skip_btn = styled_btn(ctrl, "⏭  Skip", lambda: MANAGER.skip())
+    skip_btn = styled_btn(ctrl, "⏭  Interrupt", lambda: MANAGER.interrupt())
     skip_btn.pack(side="left", expand=True, fill="x", padx=(0, 6))
     stop_btn = styled_btn(ctrl, "⏹  Stop", lambda: MANAGER.stop_all())
     stop_btn.pack(side="left", expand=True, fill="x")
