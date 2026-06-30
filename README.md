@@ -51,7 +51,7 @@ It doesn't care which model is on the other end. If your AI of choice can call M
 3. **The AI works — and tells you out loud what it's doing as it goes.** ("Checking your calendar… found three events tomorrow… drafting the reply…")
 4. **You hear the beeps again.** The AI's done with that turn. Your move.
 
-**One thing to know up front:** the audio flow is one-way at a time. You can't cut the AI off mid-sentence with your voice — once it's talking or working, the only way to interrupt is to click or tap directly in the AI's UI. The beeps are the only voice handoff signal.
+**One thing to know up front:** the audio flow is one turn at a time. With the basic terminal listener, the beeps are the only handoff and you can't cut the AI off by voice. **The Voice App (below) adds real controls** — **Pause** to hold the AI, **Interrupt** to take the floor immediately, and **Stop** to end — from your headset's play/pause button or the app window. See [The Voice App](#the-voice-app-windows).
 
 ---
 
