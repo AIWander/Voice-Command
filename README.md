@@ -88,6 +88,21 @@ Install any combination. Voice-Command is the mouth and ears; these are the rest
 
 ---
 
+## The easiest way: download the installer
+
+Grab the signed, self-contained installer for your PC from the [**latest release**](https://github.com/AIWander/Voice-Command/releases/latest) and double-click it:
+
+| Your PC | Download |
+|---|---|
+| **Intel / AMD (x64)** | `CPC-Voice-Setup-x64.exe` |
+| **ARM64** (Snapdragon, etc.) | `CPC-Voice-Setup-arm64.exe` |
+
+It bundles everything — a private Python runtime, the speech-to-text model, and the `voice.exe` MCP wrapper — so there's **nothing else to install, and no internet needed at install time**. It wires the `voice` MCP server into Claude Desktop and Claude Code for you and adds a shortcut. Every binary and installer is **Authenticode-signed (publisher: Joseph Wander)**.
+
+> Not on Windows, or want to wire it by hand? Use one of the source paths below.
+
+---
+
 ## The easy way to install: ask your AI to do it
 
 This is the whole point. You shouldn't need a CS degree to get this running.
