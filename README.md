@@ -242,6 +242,8 @@ The terminal listener works, but on Windows there's a nicer way: **the Voice App
   <img src="docs/voice-app.png" alt="The Voice App, paused mid-playback — amber paused banner, Resume button, and the live transcript" width="360">
 </p>
 
+> 📖 **Driving it from an AI agent?** See the [Voice System operating guide](docs/VOICE_SYSTEM.md) — the pause/interrupt/stop control model, the HTTP API on `:5123`, the playback backends, and the rules for running a clean voice exchange.
+
 ```
 START_VOICE_APP.bat
 ```
