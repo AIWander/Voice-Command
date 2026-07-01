@@ -44,6 +44,32 @@ jobs:
             src="${src}.exe"
           fi
           mv "$src" "${{ matrix.artifact }}"
+      # --- Authenticode (Azure Trusted Signing, publisher "Joseph Wander") ---
+      # No-ops safely until the repo secrets exist: AZURE_TENANT_ID,
+      # AZURE_CLIENT_ID, AZURE_CLIENT_SECRET (a service principal with the
+      # "Trusted Signing Certificate Profile Signer" role on the AIWander
+      # signing account). Cosign/Sigstore signing below is unaffected.
+      - name: Check Authenticode secrets
+        id: cansign
+        if: contains(matrix.target, 'windows')
+        shell: bash
+        env:
+          AZ: ${{ secrets.AZURE_CLIENT_ID }}
+        run: |
+          if [ -n "$AZ" ]; then echo "ok=true" >> "$GITHUB_OUTPUT";
+          else echo "ok=false" >> "$GITHUB_OUTPUT"; echo "Azure signing secrets not configured - skipping Authenticode (cosign still signs)."; fi
+      - name: Authenticode sign (Azure Trusted Signing)
+        if: contains(matrix.target, 'windows') && steps.cansign.outputs.ok == 'true'
+        uses: azure/trusted-signing-action@v5
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: https://eus.codesigning.azure.net
+          trusted-signing-account-name: AIWander
+          certificate-profile-name: cpc-signing
+          files-folder: ${{ github.workspace }}
+          files-folder-filter: exe
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
