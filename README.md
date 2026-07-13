@@ -4,6 +4,14 @@
 
 **Talk to your AI. Hear it work.**
 
+**Part of [CPC](https://github.com/AIWander) (Copy Paste Compute)** and the free core trio
+with [AI-Hands](https://github.com/AIWander/AI-Hands) and
+[Programmer-Wander](https://github.com/AIWander/Programmer-Wander).
+
+**Names you will see:** product and repository = Voice-Command; MCP server key = `voice`;
+Rust wrapper = `voice-mcp.exe`; Windows companion = Voice App; listening service = the
+Python voice server included in this repository.
+
 Voice-Command lets you voice-control your AI end-to-end. You say what you want done — Claude chat or another AI does it, using whatever tools, connectors, and MCPs it has access to — and narrates what it's doing as it goes. Voice adds no new privileges; it only invokes tools the user has already installed and enabled. Sensitive actions should require confirmation. If it can do it typed, you can ask for it spoken.
 
 Under the hood it uses [faster-whisper](https://github.com/SYSTRAN/faster-whisper) to understand what you say (running fully on your own computer — your voice doesn't go to the cloud) and [edge-tts](https://github.com/rany2/edge-tts) to speak responses back through Microsoft Edge's online text-to-speech service. It also reads the *feel* of how you say things — excited, hesitant, frustrated — and passes that along so the AI can respond more naturally.
@@ -81,7 +89,7 @@ The voice layer doesn't add capabilities — it just changes how you reach them.
 Voice-Command is most useful when your AI also has hands. These three companion MCPs are all **local tools** that live on your computer, all callable by voice once Voice-Command is wired up:
 
 - **[`ops`](https://github.com/AIWander/ops)** — file and shell operations: read/write files, run commands, manage processes
-- **[`hands`](https://github.com/AIWander/hands)** — browser automation, Windows UI control, vision/OCR
+- **[AI-Hands](https://github.com/AIWander/AI-Hands)** — browser automation, Windows UI control, vision/OCR; its binary and MCP server key remain `hands`
 - **[`workflow`](https://github.com/AIWander/workflow)** — API discovery and replay, credential vault, scheduled flows
 
 Install any combination. Voice-Command is the mouth and ears; these are the rest of the body. These tools run locally, but the actions they perform can still touch files, browsers, APIs, email, or shell commands depending on what you have enabled.
