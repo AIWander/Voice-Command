@@ -90,7 +90,6 @@ Voice-Command is most useful when your AI also has hands. These three companion 
 
 - **[`ops`](https://github.com/AIWander/ops)** — file and shell operations: read/write files, run commands, manage processes
 - **[AI-Hands](https://github.com/AIWander/AI-Hands)** — browser automation, Windows UI control, vision/OCR; its binary and MCP server key remain `hands`
-- **[`workflow`](https://github.com/AIWander/workflow)** — API discovery and replay, credential vault, scheduled flows
 
 Install any combination. Voice-Command is the mouth and ears; these are the rest of the body. These tools run locally, but the actions they perform can still touch files, browsers, APIs, email, or shell commands depending on what you have enabled.
 
