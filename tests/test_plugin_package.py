@@ -1,7 +1,11 @@
 import json
 import re
+import shutil
+import subprocess
 import tomllib
 from pathlib import Path
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -113,6 +117,85 @@ def test_full_installer_bundles_backend_plugin_and_ui_handoff():
     assert "not fully offline" in readme
     assert "C:\\CPC" not in iss
     assert "C:\\Users\\josep" not in iss
+
+
+def test_notify_reports_forced_clipboard_failure_without_ui(tmp_path):
+    powershell = shutil.which("powershell.exe") or shutil.which("powershell") or shutil.which("pwsh")
+    command_prompt = shutil.which("cmd.exe") or shutil.which("cmd")
+    if not powershell or not command_prompt:
+        pytest.skip("The Windows installer shell is unavailable on this CI runner")
+
+    app_dir = tmp_path / "Voice Command Test"
+    app_dir.mkdir()
+    installer_dir = app_dir / "installer"
+    installer_dir.mkdir()
+    instructions_path = app_dir / "APPLY_TO_YOUR_AI.txt"
+    instructions_path.write_text("Test activation instructions\n", encoding="utf-8")
+    terminal_path = installer_dir / "Show-Install-Instructions.cmd"
+    shutil.copy2(ROOT / "installer" / "Show-Install-Instructions.cmd", terminal_path)
+
+    completed = subprocess.run(
+        [
+            powershell,
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(ROOT / "installer" / "Notify-Install.ps1"),
+            "-AppDir",
+            str(app_dir),
+            "-ForceClipboardFailure",
+            "-NoUi",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert (app_dir / "clipboard-status.txt").read_text(encoding="utf-8").strip() == "unavailable"
+    output = completed.stdout + completed.stderr
+    assert "Clipboard copy was unavailable." in output
+    assert str(instructions_path) in output
+    assert "copied to your clipboard" not in output
+
+    terminal = subprocess.run(
+        [command_prompt, "/d", "/c", str(terminal_path), "--no-pause"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert terminal.returncode == 0, terminal.stderr
+    assert "Clipboard copy was unavailable." in terminal.stdout
+    assert "were copied to your clipboard" not in terminal.stdout
+
+
+def test_terminal_message_uses_recorded_clipboard_status():
+    terminal = (ROOT / "installer" / "Show-Install-Instructions.cmd").read_text(encoding="utf-8")
+    assert "clipboard-status.txt" in terminal
+    assert 'if /I "%ClipboardStatus%"=="copied"' in terminal
+    assert 'if /I "%ClipboardStatus%"=="unavailable"' in terminal
+    assert "Clipboard copy could not be confirmed." in terminal
+    assert "The same instructions shown below are on your clipboard." not in terminal
+
+
+def test_silent_install_renders_files_without_clipboard_or_ui_steps():
+    for name in ("Voice-Command-Full.iss", "Voice-Command-Plugin.iss"):
+        installer = (ROOT / "installer" / name).read_text(encoding="utf-8")
+        lines = installer.splitlines()
+        finalize = next(line for line in lines if "Finalize-Install.ps1" in line and line.startswith("Filename:"))
+        notify = next(line for line in lines if "Notify-Install.ps1" in line and line.startswith("Filename:"))
+        terminal = next(
+            line for line in lines if "Show-Install-Instructions.cmd" in line and line.startswith("Filename:")
+        )
+        assert "skipifsilent" not in finalize
+        assert "skipifsilent" in notify
+        assert "skipifsilent" in terminal
+        assert '[InstallDelete]\nType: files; Name: "{app}\\clipboard-status.txt"' in installer
+        uninstall = installer.split("[UninstallDelete]", 1)[1]
+        assert 'Type: files; Name: "{app}\\clipboard-status.txt"' in uninstall
 
 
 def test_plugin_surface_only_package_is_not_claimed_as_standalone():

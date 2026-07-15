@@ -64,9 +64,13 @@ Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -STA -ExecutionPolicy Bypass -File ""{app}\installer\Notify-Install.ps1"" -AppDir ""{app}"""; StatusMsg: "Copying per-AI instructions to the clipboard..."; Flags: runhidden waituntilterminated skipifsilent
 Filename: "{cmd}"; Parameters: "/K ""{app}\installer\Show-Install-Instructions.cmd"""; Description: "Show the activation instructions in a terminal"; Flags: postinstall nowait skipifsilent
 
+[InstallDelete]
+Type: files; Name: "{app}\clipboard-status.txt"
+
 [UninstallDelete]
 Type: files; Name: "{app}\APPLY_TO_YOUR_AI.txt"
 Type: files; Name: "{app}\install-result.json"
+Type: files; Name: "{app}\clipboard-status.txt"
 Type: filesandordirs; Name: "{app}\marketplace"
 Type: filesandordirs; Name: "{app}\installer"
 Type: filesandordirs; Name: "{app}\bin"
