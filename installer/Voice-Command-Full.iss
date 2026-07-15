@@ -78,6 +78,9 @@ Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile
 Filename: "{cmd}"; Parameters: "/K ""{app}\installer\Show-Install-Instructions.cmd"""; Description: "Show the activation instructions in a terminal"; Flags: postinstall nowait skipifsilent
 Filename: "{app}\Start-CPC-Voice.bat"; Description: "Start CPC Voice now (does not open the microphone)"; Flags: postinstall nowait skipifsilent unchecked
 
+[InstallDelete]
+Type: files; Name: "{app}\clipboard-status.txt"
+
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\python"
 Type: filesandordirs; Name: "{app}\models"
@@ -86,3 +89,4 @@ Type: filesandordirs; Name: "{app}\marketplace"
 Type: filesandordirs; Name: "{app}\installer"
 Type: files; Name: "{app}\APPLY_TO_YOUR_AI.txt"
 Type: files; Name: "{app}\install-result.json"
+Type: files; Name: "{app}\clipboard-status.txt"
