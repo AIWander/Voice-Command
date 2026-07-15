@@ -1,0 +1,12 @@
+interface:
+  display_name: "Voice Command"
+  short_description: "Talk with an AI through local speech I/O"
+  default_prompt: "Use $voice-command for a short spoken conversation."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "voice"
+      description: "Local Voice-Command speech I/O server"
+      transport: "stdio"
+policy:
+  allow_implicit_invocation: true

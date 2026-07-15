@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "voice": {
+      "command": "voice-mcp.exe",
+      "args": []
+    }
+  }
+}

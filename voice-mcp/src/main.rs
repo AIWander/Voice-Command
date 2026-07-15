@@ -544,8 +544,8 @@ async fn speak_via_app(
                 Ok(r) => r.json().await.unwrap_or(json!({})),
                 Err(_) => continue,
             };
-            let idle = snap["state"].as_str() == Some("IDLE")
-                && snap["queue"].as_u64().unwrap_or(0) == 0;
+            let idle =
+                snap["state"].as_str() == Some("IDLE") && snap["queue"].as_u64().unwrap_or(0) == 0;
             if idle {
                 return Ok(Some(json!({"status": "spoke", "id": id})));
             }
@@ -731,7 +731,7 @@ fn checkpoint(path: Option<&str>, note: Option<&str>) -> Result<Value, String> {
         .map_err(|e| format!("Lock error: {}", e))?;
 
     // Format as markdown
-    let mut content = format!("# Voice Session Transcript\n\n");
+    let mut content = "# Voice Session Transcript\n\n".to_string();
     content.push_str(&format!("**Session ID:** {}\n", session_id));
     content.push_str(&format!("**Saved:** {}\n", Utc::now().to_rfc3339()));
     if let Some(n) = note {
@@ -1055,7 +1055,7 @@ async fn main() {
                     id,
                     Some(json!({
                         "protocolVersion": "2024-11-05",
-                        "serverInfo": { "name": "voice", "version": "0.2.0" },
+                        "serverInfo": { "name": "voice", "version": env!("CARGO_PKG_VERSION") },
                         "capabilities": { "tools": {} }
                     })),
                     None,

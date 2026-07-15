@@ -1,0 +1,29 @@
+{
+  "name": "voice-command",
+  "version": "0.3.1",
+  "description": "Optional speech input and output through a localhost-only MCP wrapper.",
+  "author": {
+    "name": "AIWander",
+    "url": "https://github.com/AIWander"
+  },
+  "homepage": "https://github.com/AIWander/Voice-Command",
+  "repository": "https://github.com/AIWander/Voice-Command",
+  "license": "Apache-2.0",
+  "keywords": ["voice", "speech", "tts", "stt", "mcp"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Voice Command",
+    "shortDescription": "Talk with an AI through Voice-Command speech I/O.",
+    "longDescription": "Adds the Voice-Command MCP wrapper and concise operating guidance. Speech recognition is local; current edge-tts speech output sends response text to Microsoft's online service. Voice changes the input and output channel only and grants no new tool privileges.",
+    "developerName": "AIWander",
+    "category": "Productivity",
+    "capabilities": ["Speech input", "Speech output", "Playback control"],
+    "websiteURL": "https://github.com/AIWander/Voice-Command",
+    "defaultPrompt": [
+      "Use Voice Command for a short spoken conversation.",
+      "Check whether my local voice listener is ready.",
+      "Explain how to enable Voice Command in this client."
+    ]
+  }
+}

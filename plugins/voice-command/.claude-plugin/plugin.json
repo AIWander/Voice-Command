@@ -1,0 +1,12 @@
+{
+  "name": "voice-command",
+  "version": "0.3.1",
+  "description": "Optional speech input and output through a localhost-only MCP wrapper.",
+  "author": {
+    "name": "AIWander",
+    "url": "https://github.com/AIWander"
+  },
+  "homepage": "https://github.com/AIWander/Voice-Command",
+  "repository": "https://github.com/AIWander/Voice-Command",
+  "license": "Apache-2.0"
+}
