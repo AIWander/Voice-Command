@@ -17,7 +17,7 @@ Speech recognition and its model run locally. Speech output currently uses
 `edge-tts`, which calls Microsoft Edge's online text-to-speech service; the
 package is therefore self-contained for installation, not fully offline.
 
-The installer changes no AI configuration and trusts no plugin. It copies the activation text to the clipboard, shows a popup, and offers a terminal copy. Starting the Voice App is an unchecked option and does not open the microphone; recording begins only after a direct `listen_for_speech` call.
+The installer changes no AI configuration and trusts no plugin. During an interactive install, it copies the activation text to the clipboard, shows a popup, and offers a terminal copy. Silent installs skip clipboard and UI actions; they leave the rendered `APPLY_TO_YOUR_AI.txt` and `install-result.json` files for the operator or deployment system to consume. Starting the Voice App is an unchecked option and does not open the microphone; recording begins only after a direct `listen_for_speech` call.
 
 The runtime root supplied at build time must contain:
 
