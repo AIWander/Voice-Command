@@ -3,7 +3,7 @@
 > **If you are an AI pointed at this repo, this is your manual.** It tells you everything you need
 > to give a user a real two-way voice conversation with the **Voice App** — speak, listen, and let
 > them pause / interrupt / stop you. Standalone: assumes only this cloned repo. Last verified
-> against **Voice App v3.0**.
+> against **Voice App v3.1**.
 
 ---
 
@@ -25,11 +25,12 @@
 4. **Confirm it's the unified app:** `GET /status` → expect `"app": "voice_app"` and
    `"model": "ready"`. (The legacy `voice_server.py` answers `/status` too but has **no** playback
    controls.)
-5. **Drive the loop** — speak, then listen, then reply to what you heard:
+5. **Drive the loop** — speak, immediately start listening, then reply to what you heard:
    ```bash
    curl -s -XPOST localhost:5123/say -H 'Content-Type: application/json' -d '{"text":"Hi! What can I do for you?"}'
    curl -s -XPOST 'localhost:5123/listen?timeout=60&silence_timeout=3'   # blocks, beeps, records, returns {text}
-   # → read the text, COMPOSE A NEW REPLY to it, /say that, /listen again … until they Stop.
+   # While playback runs, the no-beep interruption listener watches configured phrases.
+   # Read the result, compose a new or context-preserving revised reply, and loop until Stop.
    ```
    Prefer MCP? Wire the `voice-mcp` server (see README "Config snippets per client") and call the
    `speak` and `listen_for_speech` tools instead of curl — same behavior.
@@ -47,6 +48,7 @@ rule is: **the mic only opens when it's the user's turn.**
 |---|---|---|
 | **Pause** (headset play/pause button, the Pause button, or `POST /pause`) | **HOLD** — freezes playback in place; Resume to keep hearing. | **No** — pausing never opens the mic. |
 | **Interrupt** (the Interrupt button, or `POST /interrupt`) | **"My turn."** Ends the current speech + drops the queue so the waiting listen opens the mic. The conversation continues. | **Yes** |
+| **Interruption phrase** (default `umm`) | Pauses at the current position and lets the waiting regular listener beep and capture. Empty capture resumes; new text replaces the remainder. | **Yes** |
 | **Stop** (the Stop button, or `POST /stop`) | **Ends the exchange.** Drops all audio; a waiting `/listen` returns `{"stopped": true}`. | No — the loop ends. |
 | *(natural finish)* | Speech plays to the end and the file closes. | **Yes** — listen begins. |
 
@@ -55,6 +57,8 @@ rule is: **the mic only opens when it's the user's turn.**
   never reaches a natural end).
 - Once the mic opens it records a **5-second minimum** so a short config can't clip the start of a
   reply.
+- The phrase-only listener has no beep and does not return general speech. It releases the mic before
+  the regular listener starts. It remains armed during Pause unless configuration disables that.
 
 **Design note — why pause is reliable:** pause works *because it doesn't depend on you (the AI)
 noticing it.* You keep generating, oblivious; the app holds the mic shut at the playback layer
@@ -68,18 +72,22 @@ until you finish or the user interrupts. Don't try to track or react to pause �
 |---|---|
 | `GET /status` | `{version, backend, model, app:"voice_app", features[…]}` |
 | `GET /playback` | `{state, text, position_ms, duration_ms, queue, recording}` — `state ∈ IDLE\|SPEAKING\|PAUSED\|LISTENING` |
+| `GET /interruption-listener` | Current phrase-listener state, configured phrases, last trigger, and mic level. |
 | `POST /say` `{text, voice?, speed?, pitch?, volume?}` | Generate TTS (edge-tts) and **queue** it (returns immediately). |
 | `POST /play` `{path, text?, volume?, delete_after?}` | Queue an existing audio file. |
 | `POST /pause` · `/resume` · `/toggle` | Hold / continue / flip. |
 | `POST /interrupt` (alias `/skip`) | End current speech + drain queue → the waiting `/listen` opens the mic. |
 | `POST /stop` | End the exchange; a gating `/listen` returns `{stopped:true}`. |
+| `POST /interruption-listener/config` `{trigger_phrases:[...]}` | Validate and persist the user's interruption phrases. |
 | `POST /listen?timeout=&silence_timeout=&min_speech_duration=&rms_threshold=&skip_filter=&skip_emotion=` | Wait at the gate, beep, record, transcribe → `{success, text, emotion?}`, or `{success:false, stopped:true}`, or `{success:false, error:"No speech detected"}`. |
 
 **The gate (inside `/listen`):** blocks while audio is **playing, PAUSED, or queued**. Releases on
 natural finish, on **Interrupt** (queue drained), or bails on **Stop**. Capped at 30 min.
 
 The server is threaded, so control calls (`/pause`, `/interrupt`, `/stop`) stay responsive while a
-`/listen` is blocking.
+`/listen` is blocking. A configured phrase temporarily bypasses the gate while playback is paused.
+When new speech is captured, `/listen` also returns `listen_reason`, the complete prior response,
+playback position, queued responses, and a response-revision instruction.
 
 ---
 
@@ -89,14 +97,21 @@ The server is threaded, so control calls (`/pause`, `/interrupt`, `/stop`) stay 
    what was actually said.** Never re-`/say` your previous line — a repeated sentence is far more
    jarring spoken than typed (no scrollback) and reads as "not listening." Silence while you think
    is fine; repetition is not.
-2. **Speak short.** Tight turns are easy to interrupt and keep the point up front. Chunk long content.
-3. **Loop until Stop.** Keep speak↔listen going until the user says a stop-phrase or `/listen`
+2. **Start listening immediately.** Call `/listen` immediately after non-blocking `/say`; it waits
+   while playback and phrase monitoring continue.
+3. **Revise rather than restart.** If `listen_reason` is `wake_phrase` or `widget_interrupt`, use the
+   returned `interruption` context. Address the new input and carry forward relevant unfinished content
+   without replaying wording already heard.
+4. **Speak short.** Tight turns are easy to interrupt and keep the point up front. Chunk long content.
+5. **Loop until Stop.** Keep speak↔listen going until the user says a stop-phrase or `/listen`
    returns `{stopped:true}`. Don't end after one turn.
-4. **Don't time the beep yourself.** `/say` is non-blocking and `/listen` waits for playback — just
+6. **Don't time the beep yourself.** `/say` is non-blocking and `/listen` waits for playback — just
    call `/say` then `/listen`.
-5. **Mind the client timeout.** A `/listen` can block for `playback_remaining + record_window`; set
+7. **Mind the client timeout.** A `/listen` can block for `playback_remaining + record_window`; set
    your HTTP timeout to exceed both (e.g. 120s) or it returns empty mid-record.
-6. **Pause is the user's, not yours.** Never `/pause` to buy time — stay silent and process.
+8. **Pause is the user's, not yours.** Never `/pause` to buy time — stay silent and process.
+9. **Do not speak a configured interruption phrase as filler.** The open phrase-listener mic can hear
+   playback leakage.
 
 ---
 
@@ -119,7 +134,8 @@ The server is threaded, so control calls (`/pause`, `/interrupt`, `/stop`) stay 
 
 | File | Role |
 |---|---|
-| `voice_app.py` | **The Voice App** (v3.0) — playback + listening + UI, serves `:5123`. |
+| `voice_app.py` | **The Voice App** (v3.1) — playback + two listening planes + UI, serves `:5123`. |
+| `voice_interrupt.py` | Phrase normalization, local phrase settings, and interruption context contract. |
 | `START_VOICE_APP.bat` | Silent launcher (Windows). |
 | `voice_server.py` | Legacy listen-only HTTP server (no playback controls). |
 | `server.py` | Python MCP wrapper (fallback if you don't use the Rust binary). |
@@ -133,6 +149,22 @@ You do **not** need anything outside this repo to run a full voice exchange.
 
 ---
 
-## 6. Known follow-ups
-- The Rust `playback_control` tool still names the action `skip`; the app aliases `/skip → /interrupt`, so it works. `interrupt` will be added to the tool vocabulary on the next Rust build.
-- Headset-only Interrupt gesture (mapping the Next-Track media key to `/interrupt`) is not yet built — the headset button is pause/hold only; use the app's Interrupt button to grab the floor.
+## 6. Interruption-listener configuration
+
+The default is enabled with `umm` as the trigger. The widget's comma-separated phrase field persists a
+per-user override under the user's local application-data directory. Repository defaults live in
+`voice.config.toml`:
+
+```toml
+[interruption_listener]
+enabled = true
+trigger_phrases = ["umm"]
+listen_while_paused = true
+window_secs = 1.5
+rms_threshold = 100.0
+cooldown_secs = 1.5
+empty_handoff_timeout_secs = 5.0
+```
+
+The Rust `playback_control` tool accepts both `interrupt` and the older `skip` alias. A headset-only
+Interrupt gesture is still a follow-up; the normal headset media button remains Pause/Resume.

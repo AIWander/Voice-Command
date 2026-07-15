@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Interruption listener** — a second, no-beep listening plane monitors user-selected phrases
+  (default `umm`) while assistant audio is playing or paused. A match pauses in place and hands the
+  microphone to the regular beep-and-transcribe listener.
+- **Context-preserving interruption contract** — wake phrases and widget Interrupt return the prior
+  response, playback position, queued responses, turn reason, and an instruction for the connected AI
+  to revise without forgetting unfinished content or replaying wording already heard.
+- **Silence resume** — an empty regular-listener capture after a wake phrase resumes the same audio at
+  the saved position and re-arms phrase monitoring.
+- **Widget phrase selection** — comma-separated interruption words persist per user, with `umm`
+  preconfigured.
+- Windows x64 acceptance path for the v3.1 Voice App and Rust `voice-mcp` 0.4.0 wrapper.
 - **Voice App** (`voice_app.py`, Windows x64 + ARM64) — a single windowed app that replaces the listening terminal: TTS playback queue with true pause/resume, listening with live mic level, color-coded transcript, and status display. Launch with `START_VOICE_APP.bat`.
 - **Headset pause/resume** — the app registers a native Windows media session (SMTC via `winsdk`), so the play/pause button on your headset (or keyboard) pauses Claude's voice exactly like any other media. Fallback path (no `winsdk`): a persistent PowerShell-hosted WPF player plus a global media-key hook that only captures the key while the app's audio is active.
 - **Listen handoff gated on playback end** — `listen_for_speech` now waits for queued/paused playback to finish before the ready-beep, so pausing the voice stalls the switch back to listening; the AI can finish responding while you're still hearing it.

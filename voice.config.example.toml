@@ -2,9 +2,10 @@
 # Copy this file to `voice.config.toml` (next to voice_server.py) or set
 # the VOICE_CONFIG_PATH environment variable to point at it.
 #
-# Both the Rust voice-mcp server and the Python voice_server.py read this
-# file on every TTS/STT call — no restart needed when you change values.
-# Per-call parameters always override what's in here.
+# The Rust voice-mcp server and Python voice services read TTS/STT values on
+# each call. Interruption-listener timing values load when the Voice App starts;
+# phrase changes made in the widget apply immediately and persist per user.
+# Per-call parameters override matching TTS/STT values.
 
 [defaults]
 speed = 1.0
@@ -41,6 +42,19 @@ noise_filter_enabled = true
 listen_timeout_secs = 120
 # Whisper beam search width (higher = more accurate, slower)
 beam_size = 5
+
+[interruption_listener]
+# A no-beep phrase-only listener runs while assistant audio is playing or held.
+# A match pauses playback and hands the mic to the regular beep-and-transcribe
+# listener. The widget can override this phrase list for the current user.
+enabled = true
+trigger_phrases = ["umm"]
+listen_while_paused = true
+window_secs = 1.5
+rms_threshold = 100.0
+cooldown_secs = 1.5
+# If no speech follows the regular-listener beep after a trigger, resume.
+empty_handoff_timeout_secs = 5.0
 
 [playback]
 # Voice App (voice_app.py, Windows) playback engine. "auto" tries winsdk —

@@ -52,7 +52,7 @@ fn tool_definitions() -> Value {
         "tools": [
             {
                 "name": "speak",
-                "description": "Queue text for speech via the Voice App (non-blocking: returns immediately while audio plays, so you can keep working). The user can pause/resume playback with their headset media button or the app window; listen_for_speech automatically waits for playback to fully finish. Set wait=true to block until playback completes. Falls back to direct edge-tts playback if the Voice App isn't running.",
+                "description": "Queue text for speech via the Voice App. Call listen_for_speech immediately after this non-blocking call: its regular listener waits while the no-beep interruption listener monitors configured words during playback. Set wait=true only for one-way playback. Falls back to direct edge-tts playback if the Voice App is not running.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -68,18 +68,18 @@ fn tool_definitions() -> Value {
             },
             {
                 "name": "playback_control",
-                "description": "Control TTS playback in the Voice App: pause, resume, toggle, skip (current item), stop (clear whole queue), or status (state, position, queue length). Requires the Voice App (voice_app.py) to be running.",
+                "description": "Control TTS playback in the Voice App: pause, resume, toggle, interrupt/skip (give the user the floor), stop (end the exchange), or status. Pause is only a hold; interrupt/skip opens the regular listener.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "action": { "type": "string", "description": "pause | resume | toggle | skip | stop | status" }
+                        "action": { "type": "string", "description": "pause | resume | toggle | interrupt | skip | stop | status" }
                     },
                     "required": ["action"]
                 }
             },
             {
                 "name": "listen_for_speech",
-                "description": "Listen for voice input. Returns transcribed speech. If Voice App TTS playback is active or paused, recording (and the ready-beep) automatically waits until playback fully finishes — a user pause stalls the handoff.",
+                "description": "Listen for voice input. Call immediately after speak. During playback a no-beep listener watches configured interruption words; a match pauses playback and this regular listener beeps. If the result includes interruption context, address the new input and preserve relevant unfinished prior content without repeating wording already heard. Pause alone remains a hold; interrupt/skip gives the user the floor.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -544,8 +544,8 @@ async fn speak_via_app(
                 Ok(r) => r.json().await.unwrap_or(json!({})),
                 Err(_) => continue,
             };
-            let idle = snap["state"].as_str() == Some("IDLE")
-                && snap["queue"].as_u64().unwrap_or(0) == 0;
+            let idle =
+                snap["state"].as_str() == Some("IDLE") && snap["queue"].as_u64().unwrap_or(0) == 0;
             if idle {
                 return Ok(Some(json!({"status": "spoke", "id": id})));
             }
@@ -584,7 +584,7 @@ async fn playback_control(action: &str) -> Result<Value, String> {
         .map_err(|e| format!("Client error: {}", e))?;
     let resp = match action {
         "status" => client.get("http://localhost:5123/playback").send().await,
-        "pause" | "resume" | "toggle" | "skip" | "stop" => {
+        "pause" | "resume" | "toggle" | "interrupt" | "skip" | "stop" => {
             client
                 .post(format!("http://localhost:5123/{}", action))
                 .send()
@@ -592,7 +592,7 @@ async fn playback_control(action: &str) -> Result<Value, String> {
         }
         _ => {
             return Err(format!(
-                "Unknown action: {} (use pause|resume|toggle|skip|stop|status)",
+                "Unknown action: {} (use pause|resume|toggle|interrupt|skip|stop|status)",
                 action
             ))
         }
@@ -643,10 +643,19 @@ async fn listen_for_speech(
         let text = json["text"].as_str().unwrap_or("");
         // Add to transcript
         add_to_transcript("user", text);
-        // Pass through emotion data if present
+        // Preserve the Voice App's turn-reason and interruption context so the
+        // connected AI can revise rather than forget or replay its prior reply.
         let mut result = json!({"text": text});
-        if let Some(emotion) = json.get("emotion") {
-            result["emotion"] = emotion.clone();
+        for key in [
+            "emotion",
+            "listen_reason",
+            "interruption",
+            "response_instruction",
+            "resumed",
+        ] {
+            if let Some(value) = json.get(key) {
+                result[key] = value.clone();
+            }
         }
         Ok(result)
     } else {
@@ -697,7 +706,7 @@ async fn check_voice_server() -> Result<Value, String> {
                 Ok(json!({
                     "ready": true,
                     "message": if is_app {
-                        "Voice App ready (unified playback + listening, pause via headset)"
+                        "Voice App ready (playback, regular listening, interruption listener)"
                     } else {
                         "Voice server ready (legacy listen-only; playback controls unavailable)"
                     },
@@ -1055,7 +1064,7 @@ async fn main() {
                     id,
                     Some(json!({
                         "protocolVersion": "2024-11-05",
-                        "serverInfo": { "name": "voice", "version": "0.2.0" },
+                        "serverInfo": { "name": "voice", "version": env!("CARGO_PKG_VERSION") },
                         "capabilities": { "tools": {} }
                     })),
                     None,

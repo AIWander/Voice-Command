@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CPC Voice App v3.0 — Unified voice window
+CPC Voice App v3.1 — Unified voice window
 ==========================================
 One app, one window: TTS playback + pause/resume + listening.
 
@@ -10,6 +10,8 @@ One app, one window: TTS playback + pause/resume + listening.
   • /say generates TTS in-app via edge-tts (MCP server stays thin)
   • Back-compat: /listen and /status behave like voice_server.py v2.0
   • faster-whisper STT, noise filtering, emotion detection (ported from v2.0)
+  - No-beep interruption listener during playback, default trigger: "umm"
+  - Regular-listener handoff preserves prior response context for AI revision
 
 Playback backends (auto-selected):
   1. winsdk  — Windows.Media.Playback.MediaPlayer. Registers a System Media
@@ -25,7 +27,8 @@ HTTP API on http://localhost:5123
   GET  /playback          playback state {state, text, position_ms, duration_ms, queue}
   POST /say               JSON {text, voice?, speed?, pitch?, volume?} -> queue TTS
   POST /play              JSON {path, text?, volume?, delete_after?} -> queue audio file
-  POST /pause /resume /toggle /skip /stop
+  POST /pause /resume /toggle /interrupt /skip /stop
+  GET/POST /interruption-listener[/config]
   POST /listen?...        record + transcribe (waits for playback queue to drain first)
 """
 
@@ -40,6 +43,7 @@ import sys
 import tempfile
 import threading
 import time
+import tomllib
 import traceback
 import wave
 from collections import deque
@@ -48,15 +52,26 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import numpy as np
+from scipy.fft import fft
+from scipy.signal import butter, lfilter
+
+from voice_interrupt import (
+    build_interruption_context,
+    decorate_listen_result,
+    is_empty_capture,
+    load_phrase_override,
+    match_trigger,
+    normalize_trigger_phrases,
+    save_phrase_override,
+)
 
 APP_NAME = "CPC Voice"
-APP_VERSION = "3.0"
+APP_VERSION = "3.1"
 PORT = 5123
 
 # ═══════════════════════════════════════════════════════════════════
 # CONFIG
 # ═══════════════════════════════════════════════════════════════════
-import tomllib
 
 SAMPLE_RATE = 16000
 CHUNK_SIZE = 8000  # ~500ms chunks
@@ -137,6 +152,24 @@ def get_playback_config():
     }
 
 
+def get_interruption_listener_config():
+    config = read_config()
+    section = config.get("interruption_listener", {})
+    file_phrases = section.get("trigger_phrases", ["umm"])
+    phrases = load_phrase_override() or normalize_trigger_phrases(file_phrases)
+    return {
+        "enabled": bool(section.get("enabled", True)),
+        "trigger_phrases": phrases,
+        "listen_while_paused": bool(section.get("listen_while_paused", True)),
+        "window_secs": min(max(float(section.get("window_secs", 1.5)), 0.75), 4.0),
+        "rms_threshold": max(float(section.get("rms_threshold", 100.0)), 1.0),
+        "cooldown_secs": min(max(float(section.get("cooldown_secs", 1.5)), 0.25), 10.0),
+        "empty_handoff_timeout_secs": min(
+            max(float(section.get("empty_handoff_timeout_secs", 5.0)), 1.0), 15.0
+        ),
+    }
+
+
 # ═══════════════════════════════════════════════════════════════════
 # SHARED STATE
 # ═══════════════════════════════════════════════════════════════════
@@ -157,6 +190,10 @@ class AppState:
         self.mic_level = 0.0
         self.backend_name = "none"
         self.model_status = "loading"
+        self.interruption_listener_state = "starting"
+        self.interruption_phrases = ["umm"]
+        self.interruption_last_trigger = ""
+        self.interruption_mic_level = 0.0
         self.transcript = deque(maxlen=50)   # (role, text, ts)
         self.last_error = ""
 
@@ -180,6 +217,12 @@ class AppState:
                 "recording": self.recording_active,
                 "backend": self.backend_name,
                 "model": self.model_status,
+                "interruption_listener": {
+                    "state": self.interruption_listener_state,
+                    "trigger_phrases": list(self.interruption_phrases),
+                    "last_trigger": self.interruption_last_trigger,
+                    "mic_level": self.interruption_mic_level,
+                },
                 "error": self.last_error,
             }
 
@@ -441,8 +484,16 @@ class PlaybackManager:
         self._active = threading.Event()   # an item is loaded/playing/paused
         self._play_state = "idle"          # real player state from poll: playing|paused|idle
         self._stop_exchange = threading.Event()  # set by /stop to end the speak<->listen loop
+        self._handoff_lock = threading.RLock()
+        self._wake_handoff = threading.Event()
+        self._wake_context = None
+        self._pending_handoff_context = None
+        self.interruption_listener = None
         self.worker = threading.Thread(target=self._run, daemon=True, name="playback")
         self.worker.start()
+
+    def attach_interruption_listener(self, listener):
+        self.interruption_listener = listener
 
     def enqueue(self, path, text, volume, delete_after=True):
         self._stop_exchange.clear()  # a new utterance means the exchange is live
@@ -497,12 +548,20 @@ class PlaybackManager:
         the queue so the pending /listen can proceed (beep + record). The
         speak<->listen exchange CONTINUES. Besides a natural finish, this is the
         only thing that opens the mic — a pause does NOT."""
+        with self._handoff_lock:
+            self._pending_handoff_context = self._capture_context("widget_interrupt")
+            self._wake_handoff.clear()
+            self._wake_context = None
         self._drain_and_skip()
 
     def stop_all(self):
         """End the whole voice exchange: drop all audio AND signal any pending
         /listen to return 'stopped' so the speak<->listen loop ends."""
         self._stop_exchange.set()
+        with self._handoff_lock:
+            self._wake_handoff.clear()
+            self._wake_context = None
+            self._pending_handoff_context = None
         self._drain_and_skip()
 
     def barge_in(self):
@@ -525,6 +584,61 @@ class PlaybackManager:
         speech finishes naturally (the file closes) or the user hits Interrupt
         (which drains the queue, so this then returns False)."""
         return self._active.is_set() or not self.queue.empty()
+
+    def _queued_texts(self):
+        with self.queue.mutex:
+            return [item.get("text", "") for item in list(self.queue.queue)]
+
+    def _capture_context(self, source, trigger_phrase=None):
+        return build_interruption_context(
+            source,
+            trigger_phrase,
+            STATE.snapshot(),
+            self._queued_texts(),
+        )
+
+    def request_wake_handoff(self, trigger_phrase):
+        """Pause in place and let a waiting regular listener temporarily pass
+        the playback gate. Returns False when playback is no longer active or a
+        handoff is already underway."""
+        with self._handoff_lock:
+            if not self._active.is_set() or self._wake_handoff.is_set():
+                return False
+            self._wake_context = self._capture_context("wake_phrase", trigger_phrase)
+            self._pending_handoff_context = None
+            self._wake_handoff.set()
+            STATE.set(interruption_last_trigger=trigger_phrase,
+                      interruption_listener_state="handoff")
+            self.pause()
+            return True
+
+    def wake_handoff_pending(self):
+        return self._wake_handoff.is_set()
+
+    def wake_context(self):
+        with self._handoff_lock:
+            return dict(self._wake_context) if self._wake_context else None
+
+    def resume_after_empty_wake(self):
+        with self._handoff_lock:
+            self._wake_handoff.clear()
+            self._wake_context = None
+        if self._active.is_set():
+            self.resume()
+
+    def complete_wake_handoff(self):
+        with self._handoff_lock:
+            context = dict(self._wake_context) if self._wake_context else None
+            self._wake_handoff.clear()
+            self._wake_context = None
+        self._drain_and_skip()
+        return context
+
+    def consume_handoff_context(self):
+        with self._handoff_lock:
+            context = self._pending_handoff_context
+            self._pending_handoff_context = None
+            return dict(context) if context else None
 
     def exchange_stopped(self):
         """True after /stop until the next utterance — tells a gating /listen
@@ -678,8 +792,6 @@ def generate_tts(text, voice, speed, pitch):
 # ═══════════════════════════════════════════════════════════════════
 # LISTENING ENGINE (ported from voice_server.py v2.0 — feature parity)
 # ═══════════════════════════════════════════════════════════════════
-from scipy.fft import fft
-from scipy.signal import butter, lfilter
 
 WHISPER_MODEL = None
 _model_lock = threading.Lock()
@@ -700,6 +812,189 @@ def load_whisper_async():
             STATE.set(model_status=f"error: {e}")
             log(f"Whisper load FAILED: {e}")
     threading.Thread(target=_load, daemon=True, name="whisper-load").start()
+
+
+class InterruptionListener:
+    """Phrase-only microphone plane active while playback is speaking or held.
+
+    It never beeps and never returns general speech. On a configured phrase it
+    pauses playback, releases the microphone, and signals the regular /listen
+    request to perform the full beep-and-transcribe capture.
+    """
+
+    def __init__(self, manager, config):
+        self.manager = manager
+        self.enabled = config["enabled"]
+        self.listen_while_paused = config["listen_while_paused"]
+        self.window_secs = config["window_secs"]
+        self.rms_threshold = config["rms_threshold"]
+        self.cooldown_secs = config["cooldown_secs"]
+        self._phrases_lock = threading.RLock()
+        self._phrases = list(config["trigger_phrases"])
+        self._suspend = threading.Event()
+        self._shutdown = threading.Event()
+        self._mic_idle = threading.Event()
+        self._mic_idle.set()
+        self._last_trigger_at = 0.0
+        STATE.set(interruption_phrases=list(self._phrases),
+                  interruption_listener_state="idle" if self.enabled else "disabled")
+        self.worker = threading.Thread(
+            target=self._run, daemon=True, name="interruption-listener"
+        )
+        self.worker.start()
+
+    def phrases(self):
+        with self._phrases_lock:
+            return list(self._phrases)
+
+    def set_phrases(self, values, persist=True):
+        if persist:
+            phrases, _ = save_phrase_override(values)
+        else:
+            phrases = normalize_trigger_phrases(values, default_if_empty=False)
+            if not phrases:
+                raise ValueError("enter at least one interruption phrase")
+        with self._phrases_lock:
+            self._phrases = phrases
+        STATE.set(interruption_phrases=list(phrases))
+        return list(phrases)
+
+    def suspend(self, wait=False, timeout=3.0):
+        self._suspend.set()
+        if wait:
+            return self._mic_idle.wait(timeout)
+        return True
+
+    def resume_monitoring(self):
+        if not self._shutdown.is_set():
+            self._suspend.clear()
+
+    def close(self):
+        self._shutdown.set()
+        self._suspend.set()
+        self._mic_idle.wait(2.0)
+
+    def _eligible(self):
+        if not self.enabled or self._shutdown.is_set() or self._suspend.is_set():
+            return False
+        if WHISPER_MODEL is None or STATE.recording_active:
+            return False
+        if self.manager.exchange_stopped() or self.manager.wake_handoff_pending():
+            return False
+        if not self.manager.busy():
+            return False
+        if self.manager.is_paused() and not self.listen_while_paused:
+            return False
+        return True
+
+    def _run(self):
+        while not self._shutdown.is_set():
+            if not self._eligible():
+                if not self.enabled:
+                    state = "disabled"
+                elif WHISPER_MODEL is None:
+                    state = "waiting-model"
+                elif self._suspend.is_set():
+                    state = "suspended"
+                else:
+                    state = "idle"
+                STATE.set(interruption_listener_state=state,
+                          interruption_mic_level=0.0)
+                self._shutdown.wait(0.1)
+                continue
+            self._monitor_playback()
+
+    def _monitor_playback(self):
+        import pyaudio
+
+        if not _recording_lock.acquire(blocking=False):
+            self._shutdown.wait(0.1)
+            return
+
+        audio = None
+        stream = None
+        self._mic_idle.clear()
+        try:
+            audio = pyaudio.PyAudio()
+            stream = audio.open(
+                format=pyaudio.paInt16,
+                channels=1,
+                rate=SAMPLE_RATE,
+                input=True,
+                frames_per_buffer=CHUNK_SIZE,
+            )
+            STATE.set(interruption_listener_state="armed")
+            chunks_per_window = max(
+                1, int(round(self.window_secs * SAMPLE_RATE / CHUNK_SIZE))
+            )
+            carry = []
+
+            while self._eligible():
+                frames = list(carry)
+                peak_rms = 0.0
+                for _ in range(max(1, chunks_per_window - len(carry))):
+                    if not self._eligible():
+                        break
+                    data = stream.read(CHUNK_SIZE, exception_on_overflow=False)
+                    frames.append(data)
+                    samples = struct.unpack(f'{CHUNK_SIZE}h', data)
+                    rms = (sum(sample * sample for sample in samples) / CHUNK_SIZE) ** 0.5
+                    peak_rms = max(peak_rms, rms)
+                    STATE.set(interruption_mic_level=min(rms / 1000.0, 1.0))
+
+                carry = frames[-1:] if frames else []
+                if not frames or peak_rms < self.rms_threshold:
+                    continue
+                transcript = self._transcribe_window(frames)
+                trigger = match_trigger(transcript, self.phrases())
+                now = time.monotonic()
+                if not trigger or now - self._last_trigger_at < self.cooldown_secs:
+                    continue
+                if self.manager.request_wake_handoff(trigger):
+                    self._last_trigger_at = now
+                    self._suspend.set()
+                    log(f"Interruption phrase detected: {trigger!r}")
+                    break
+        except Exception as e:
+            log(f"Interruption listener error: {e}")
+            STATE.set(last_error=f"interruption listener: {e}")
+        finally:
+            if stream is not None:
+                try:
+                    stream.stop_stream()
+                    stream.close()
+                except Exception:
+                    pass
+            if audio is not None:
+                audio.terminate()
+            STATE.set(interruption_mic_level=0.0)
+            _recording_lock.release()
+            self._mic_idle.set()
+
+    def _transcribe_window(self, frames):
+        samples = np.frombuffer(b''.join(frames), dtype=np.int16)
+        samples = apply_noise_filter(samples, SAMPLE_RATE)
+        fd, temp_path = tempfile.mkstemp(prefix="voice_interrupt_", suffix=".wav")
+        os.close(fd)
+        try:
+            with wave.open(temp_path, 'wb') as wav_file:
+                wav_file.setnchannels(1)
+                wav_file.setsampwidth(2)
+                wav_file.setframerate(SAMPLE_RATE)
+                wav_file.writeframes(samples.tobytes())
+            with _model_lock:
+                segments, _ = WHISPER_MODEL.transcribe(
+                    temp_path,
+                    beam_size=1,
+                    condition_on_previous_text=False,
+                    vad_filter=True,
+                )
+                return " ".join(segment.text for segment in segments).strip()
+        finally:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
 
 
 def butter_highpass(cutoff, fs, order=4):
@@ -797,7 +1092,8 @@ def detect_emotion(features):
 
 
 def capture_voice(max_duration, skip_emotion=False, skip_filter=False,
-                  silence_timeout=None, min_speech_duration=None, rms_threshold=None):
+                  silence_timeout=None, min_speech_duration=None, rms_threshold=None,
+                  initial_silence_timeout=None):
     import pyaudio
     cfg = get_listen_defaults()
     silence_timeout = silence_timeout if silence_timeout is not None else cfg["silence_timeout"]
@@ -807,8 +1103,8 @@ def capture_voice(max_duration, skip_emotion=False, skip_filter=False,
     if WHISPER_MODEL is None:
         return {'success': False, 'error': f'Whisper model not ready ({STATE.model_status})'}
 
-    if not _recording_lock.acquire(blocking=False):
-        return {'success': False, 'error': 'Already recording'}
+    if not _recording_lock.acquire(timeout=3.0):
+        return {'success': False, 'error': 'Microphone busy'}
 
     p = None
     try:
@@ -835,6 +1131,10 @@ def capture_voice(max_duration, skip_emotion=False, skip_filter=False,
         max_silent_chunks = int(silence_timeout * SAMPLE_RATE / CHUNK_SIZE)
         max_chunks = int(max_duration * SAMPLE_RATE / CHUNK_SIZE)
         min_chunks = int(min_speech_duration * SAMPLE_RATE / CHUNK_SIZE)
+        initial_silence_chunks = (
+            int(initial_silence_timeout * SAMPLE_RATE / CHUNK_SIZE)
+            if initial_silence_timeout is not None else None
+        )
 
         for i in range(max_chunks):
             data = stream.read(CHUNK_SIZE, exception_on_overflow=False)
@@ -845,6 +1145,10 @@ def capture_voice(max_duration, skip_emotion=False, skip_filter=False,
             if rms >= rms_threshold:
                 has_speech = True
                 silent_chunks = 0
+            elif not has_speech and initial_silence_chunks is not None:
+                if i + 1 >= initial_silence_chunks:
+                    log("No speech followed the wake handoff; resuming playback")
+                    break
             elif has_speech and i >= min_chunks:
                 silent_chunks += 1
                 if silent_chunks >= max_silent_chunks:
@@ -914,6 +1218,7 @@ def capture_voice(max_duration, skip_emotion=False, skip_filter=False,
 # HTTP API
 # ═══════════════════════════════════════════════════════════════════
 MANAGER = None  # set in main()
+INTERRUPTION_LISTENER = None  # set in main()
 
 
 class VoiceHandler(BaseHTTPRequestHandler):
@@ -952,10 +1257,16 @@ class VoiceHandler(BaseHTTPRequestHandler):
                     'triple-beep', 'level-monitoring',
                     'playback', 'playback-queue', 'pause-resume',
                     'media-keys', 'listen-gate', 'say',
+                    'interruption-listener', 'context-preserving-handoff',
                 ],
             })
         elif parsed.path == '/playback':
             self.send_json({'success': True, **STATE.snapshot()})
+        elif parsed.path == '/interruption-listener':
+            self.send_json({
+                'success': True,
+                **STATE.snapshot()['interruption_listener'],
+            })
         else:
             self.send_json({'success': False, 'error': 'Unknown endpoint'})
 
@@ -988,6 +1299,15 @@ class VoiceHandler(BaseHTTPRequestHandler):
             # End the whole exchange — also tells a pending /listen to bail.
             MANAGER.stop_all()
             self.send_json({'success': True, 'action': 'stop', **STATE.snapshot()})
+        elif path == '/interruption-listener/config':
+            body = self.read_body_json()
+            try:
+                phrases = INTERRUPTION_LISTENER.set_phrases(
+                    body.get('trigger_phrases') or body.get('phrases') or ""
+                )
+                self.send_json({'success': True, 'trigger_phrases': phrases})
+            except (OSError, TypeError, ValueError) as e:
+                self.send_json({'success': False, 'error': str(e)}, code=400)
         else:
             self.send_json({'success': False, 'error': 'Unknown endpoint'})
 
@@ -1030,22 +1350,73 @@ class VoiceHandler(BaseHTTPRequestHandler):
         # Interrupt (which drains the queue, releasing the gate). /stop bails
         # out entirely. The ready-beep lives in capture_voice (the listen side),
         # so it fires whenever the mic actually opens, however we got here.
+        cfg = get_listen_defaults()
+        timeout = int(params.get('timeout', [60])[0])
+        skip_emotion = params.get('skip_emotion', ['true'])[0].lower() == 'true'
+        skip_filter = params.get('skip_filter', [str(not cfg["noise_filter_enabled"]).lower()])[0].lower() == 'true'
+        silence_timeout = float(params.get('silence_timeout', [cfg["silence_timeout"]])[0])
+        min_speech_duration = float(params.get('min_speech_duration', [cfg["min_speech_duration"]])[0])
+        min_speech_duration = max(min_speech_duration, MIN_LISTEN_FLOOR_SECS)
+        timeout = max(timeout, int(min_speech_duration) + 3)
+        rms_threshold = float(params.get('rms_threshold', [cfg["rms_threshold"]])[0])
+        empty_handoff_timeout = get_interruption_listener_config()[
+            "empty_handoff_timeout_secs"
+        ]
+
+        def capture_regular_listener(wake_handoff=False):
+            INTERRUPTION_LISTENER.suspend(wait=True)
+            if wake_handoff:
+                time.sleep(0.2)
+            return capture_voice(
+                timeout,
+                skip_emotion,
+                skip_filter,
+                silence_timeout,
+                min_speech_duration,
+                rms_threshold,
+                empty_handoff_timeout if wake_handoff else None,
+            )
+
         gate_start = time.time()
         gated = False
         while MANAGER.gate_should_wait():
             if MANAGER.exchange_stopped():
                 MANAGER.clear_stop()
+                INTERRUPTION_LISTENER.resume_monitoring()
                 self.send_json({'success': False, 'stopped': True,
                                 'error': 'exchange stopped by user'})
                 return
+            if MANAGER.wake_handoff_pending():
+                context = MANAGER.wake_context()
+                result = capture_regular_listener(wake_handoff=True)
+                if is_empty_capture(result):
+                    MANAGER.resume_after_empty_wake()
+                    INTERRUPTION_LISTENER.resume_monitoring()
+                    STATE.set(interruption_listener_state="idle")
+                    log("Wake handoff was empty; resumed interrupted playback")
+                    gate_start = time.time()
+                    gated = True
+                    continue
+                if result.get('success'):
+                    context = MANAGER.complete_wake_handoff() or context
+                    result = decorate_listen_result(result, 'wake_phrase', context)
+                else:
+                    MANAGER.resume_after_empty_wake()
+                    result = decorate_listen_result(result, 'wake_phrase', context)
+                    result['resumed'] = True
+                INTERRUPTION_LISTENER.resume_monitoring()
+                self.send_json(result)
+                return
             gated = True
             if time.time() - gate_start > LISTEN_GATE_MAX_SECS:
+                INTERRUPTION_LISTENER.resume_monitoring()
                 self.send_json({'success': False,
                                 'error': 'listen gate timeout: playback still active'})
                 return
             time.sleep(0.1)
         if MANAGER.exchange_stopped():
             MANAGER.clear_stop()
+            INTERRUPTION_LISTENER.resume_monitoring()
             self.send_json({'success': False, 'stopped': True,
                             'error': 'exchange stopped by user'})
             return
@@ -1053,20 +1424,10 @@ class VoiceHandler(BaseHTTPRequestHandler):
             log(f"Listen gate released after {time.time() - gate_start:.1f}s — opening mic")
             time.sleep(0.3)  # let any just-stopped audio flush before the beep
 
-        cfg = get_listen_defaults()
-        timeout = int(params.get('timeout', [60])[0])
-        skip_emotion = params.get('skip_emotion', ['true'])[0].lower() == 'true'
-        skip_filter = params.get('skip_filter', [str(not cfg["noise_filter_enabled"]).lower()])[0].lower() == 'true'
-        silence_timeout = float(params.get('silence_timeout', [cfg["silence_timeout"]])[0])
-        min_speech_duration = float(params.get('min_speech_duration', [cfg["min_speech_duration"]])[0])
-        # Always give the user at least MIN_LISTEN_FLOOR_SECS of mic time once it
-        # opens, even if the config floor is shorter, so a short config can't
-        # clip the start of a reply.
-        min_speech_duration = max(min_speech_duration, MIN_LISTEN_FLOOR_SECS)
-        timeout = max(timeout, int(min_speech_duration) + 3)
-        rms_threshold = float(params.get('rms_threshold', [cfg["rms_threshold"]])[0])
-        result = capture_voice(timeout, skip_emotion, skip_filter,
-                               silence_timeout, min_speech_duration, rms_threshold)
+        context = MANAGER.consume_handoff_context()
+        reason = context['source'] if context else 'natural_finish'
+        result = decorate_listen_result(capture_regular_listener(), reason, context)
+        INTERRUPTION_LISTENER.resume_monitoring()
         self.send_json(result)
 
 
@@ -1080,10 +1441,10 @@ COLORS = {
 }
 
 STATE_LABELS = {
-    AppState.SPEAKING: ("● SPEAKING", "speaking"),
-    AppState.PAUSED: ("⏸ PAUSED — listening on hold", "paused"),
-    AppState.LISTENING: ("🎤 LISTENING", "listening"),
-    AppState.IDLE: ("○ IDLE", "idle"),
+    AppState.SPEAKING: ("SPEAKING", "speaking"),
+    AppState.PAUSED: ("PAUSED — listening on hold", "paused"),
+    AppState.LISTENING: ("LISTENING", "listening"),
+    AppState.IDLE: ("IDLE", "idle"),
 }
 
 
@@ -1093,7 +1454,7 @@ def run_ui(always_on_top):
 
     root = tk.Tk()
     root.title(f"{APP_NAME} v{APP_VERSION}")
-    root.geometry("420x600")
+    root.geometry("420x650")
     root.minsize(360, 480)
     root.configure(bg=COLORS["bg"])
     if always_on_top:
@@ -1115,7 +1476,7 @@ def run_ui(always_on_top):
     backend_lbl.pack(side="right")
 
     # State banner
-    state_lbl = tk.Label(root, text="○ IDLE", font=state_font,
+    state_lbl = tk.Label(root, text="IDLE", font=state_font,
                          bg=COLORS["idle"], fg="#ffffff", pady=10)
     state_lbl.pack(fill="x", padx=16, pady=(4, 8))
 
@@ -1144,12 +1505,41 @@ def run_ui(always_on_top):
                       padx=14, pady=6, bd=0, cursor="hand2")
         return b
 
-    toggle_btn = styled_btn(ctrl, "⏯  Pause", lambda: MANAGER.toggle(), primary=True)
+    toggle_btn = styled_btn(ctrl, "Pause", lambda: MANAGER.toggle(), primary=True)
     toggle_btn.pack(side="left", expand=True, fill="x", padx=(0, 6))
-    skip_btn = styled_btn(ctrl, "⏭  Interrupt", lambda: MANAGER.interrupt())
+    skip_btn = styled_btn(ctrl, "Interrupt", lambda: MANAGER.interrupt())
     skip_btn.pack(side="left", expand=True, fill="x", padx=(0, 6))
-    stop_btn = styled_btn(ctrl, "⏹  Stop", lambda: MANAGER.stop_all())
+    stop_btn = styled_btn(ctrl, "Stop", lambda: MANAGER.stop_all())
     stop_btn.pack(side="left", expand=True, fill="x")
+
+    # Interruption phrases
+    wake_frame = tk.Frame(root, bg=COLORS["bg"])
+    wake_frame.pack(fill="x", padx=16, pady=(0, 8))
+    tk.Label(wake_frame, text="INTERRUPT WORDS", font=small_font,
+             bg=COLORS["bg"], fg=COLORS["dim"]).pack(side="left", padx=(0, 8))
+    wake_words = tk.StringVar(value=", ".join(INTERRUPTION_LISTENER.phrases()))
+    wake_entry = tk.Entry(wake_frame, textvariable=wake_words, font=small_font,
+                          bg=COLORS["panel"], fg=COLORS["text"],
+                          insertbackground=COLORS["text"], relief="flat")
+    wake_entry.pack(side="left", expand=True, fill="x", ipady=4)
+    wake_state_lbl = tk.Label(wake_frame, text="", font=small_font,
+                              bg=COLORS["bg"], fg=COLORS["dim"])
+    wake_state_lbl.pack(side="right", padx=(8, 0))
+
+    def apply_wake_words(event=None):
+        try:
+            phrases = INTERRUPTION_LISTENER.set_phrases(wake_words.get())
+            wake_words.set(", ".join(phrases))
+            STATE.set(last_error="")
+        except (OSError, TypeError, ValueError) as e:
+            STATE.set(last_error=f"interrupt words: {e}")
+
+    wake_apply = tk.Button(wake_frame, text="Apply", command=apply_wake_words,
+                           font=small_font, bg=COLORS["panel"], fg=COLORS["text"],
+                           activebackground=COLORS["accent"], relief="flat", bd=0)
+    wake_apply.pack(side="right", padx=(6, 0), ipady=2)
+    wake_entry.bind("<Return>", apply_wake_words)
+    wake_entry.bind("<FocusOut>", apply_wake_words)
 
     # Mic level
     mic_frame = tk.Frame(root, bg=COLORS["bg"])
@@ -1179,17 +1569,19 @@ def run_ui(always_on_top):
 
     def refresh_body():
         snap = STATE.snapshot()
-        label, color_key = STATE_LABELS.get(snap["state"], ("○ IDLE", "idle"))
+        label, color_key = STATE_LABELS.get(snap["state"], ("IDLE", "idle"))
         state_lbl.config(text=label, bg=COLORS[color_key])
         now_lbl.config(text=snap["text"][:280] if snap["text"] else "—")
         backend_lbl.config(text=f"{snap['backend']} · whisper: {snap['model']}")
+        wake = snap["interruption_listener"]
+        wake_state_lbl.config(text=wake["state"])
 
         # Pause button reflects engaged state: amber + Resume while paused
         if snap["state"] == AppState.PAUSED:
-            toggle_btn.config(text="▶  Resume", bg=COLORS["paused"],
+            toggle_btn.config(text="Resume", bg=COLORS["paused"],
                               activebackground=COLORS["paused"])
         else:
-            toggle_btn.config(text="⏯  Pause", bg=COLORS["accent"],
+            toggle_btn.config(text="Pause", bg=COLORS["accent"],
                               activebackground=COLORS["accent"])
 
         # progress
@@ -1205,10 +1597,14 @@ def run_ui(always_on_top):
         if mw > 1 and snap["recording"]:
             mic_canvas.create_rectangle(0, 0, mw * STATE.mic_level, 8,
                                         fill=COLORS["listening"], width=0)
+        elif mw > 1 and wake["state"] == "armed":
+            mic_canvas.create_rectangle(0, 0, mw * wake["mic_level"], 8,
+                                        fill=COLORS["paused"], width=0)
 
         q = f"queue: {snap['queue']}" if snap["queue"] else "queue: empty"
-        err = f"  ·  ⚠ {snap['error'][:60]}" if snap["error"] else ""
-        footer.config(text=f"{q}  ·  port {PORT}{err}")
+        err = f"  ·  ERROR: {snap['error'][:60]}" if snap["error"] else ""
+        words = ", ".join(wake["trigger_phrases"])
+        footer.config(text=f"{q}  ·  wake: {words}  ·  port {PORT}{err}")
 
         # transcript tail
         with STATE.lock:
@@ -1240,6 +1636,7 @@ def run_ui(always_on_top):
     def on_close():
         log("Window closed — shutting down")
         try:
+            INTERRUPTION_LISTENER.close()
             MANAGER.stop_all()
             MANAGER.close()
         except Exception:
@@ -1256,7 +1653,7 @@ def run_ui(always_on_top):
 # MAIN
 # ═══════════════════════════════════════════════════════════════════
 def main():
-    global MANAGER
+    global MANAGER, INTERRUPTION_LISTENER
     if sys.platform != "win32":
         print(
             "The Voice App window is currently Windows-only — it uses Windows\n"
@@ -1269,6 +1666,10 @@ def main():
 
     pb_cfg = get_playback_config()
     MANAGER = PlaybackManager(pb_cfg["backend"])
+    INTERRUPTION_LISTENER = InterruptionListener(
+        MANAGER, get_interruption_listener_config()
+    )
+    MANAGER.attach_interruption_listener(INTERRUPTION_LISTENER)
 
     # Media-key hook only for the subproc backend — winsdk gets the headset
     # button natively through its SMTC session (hook would double-toggle).
@@ -1286,7 +1687,8 @@ def main():
         try:
             import tkinter.messagebox as mb
             import tkinter as tk
-            r = tk.Tk(); r.withdraw()
+            r = tk.Tk()
+            r.withdraw()
             mb.showerror(APP_NAME, f"Port {PORT} is already in use.\n\n"
                          "Close the old voice server terminal, then restart this app.")
         except Exception:
@@ -1294,7 +1696,7 @@ def main():
         sys.exit(1)
 
     threading.Thread(target=server.serve_forever, daemon=True, name="http").start()
-    log(f"HTTP API on http://localhost:{PORT}  (POST /say /play /pause /resume /toggle /skip /stop /listen)")
+    log(f"HTTP API on http://localhost:{PORT}  (voice, playback, interruption listener)")
 
     if "--no-ui" in sys.argv:
         log("Headless mode (--no-ui). Ctrl+C to stop.")
@@ -1302,7 +1704,9 @@ def main():
             while True:
                 time.sleep(1)
         except KeyboardInterrupt:
-            pass
+            INTERRUPTION_LISTENER.close()
+            MANAGER.stop_all()
+            MANAGER.close()
     else:
         run_ui(pb_cfg["always_on_top"])
 

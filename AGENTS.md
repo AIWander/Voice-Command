@@ -1,7 +1,8 @@
 # AGENTS.md — you are an AI pointed at the Voice-Command repo
 
 This repo gives you (an AI agent) a **real two-way voice conversation** with your user: you speak,
-they talk back, and they can **pause / interrupt / stop** you with a headset button or the app
+they talk back, and they can **pause / interrupt / stop** you with a headset button, a configured
+interruption phrase, or the app
 window. This file is your entry point. Full manual: **[docs/VOICE_SYSTEM.md](docs/VOICE_SYSTEM.md)**.
 Human setup + per-client MCP config: **[README.md](README.md)**.
 
@@ -28,6 +29,7 @@ same thing. See README.)
 |---|---|---|
 | **Pause** (headset button / Pause / `/pause`) | **HOLD** — freezes you; Resume continues. | **No** |
 | **Interrupt** (Interrupt button / `/interrupt`) | **"My turn"** — ends your speech, opens the mic, conversation continues. | **Yes** |
+| **Interruption phrase** (default: `umm`) | Pauses in place, then opens the regular beeping listener. Silence resumes; new speech revises the response. | **Yes** |
 | **Stop** (`/stop`) | Ends the exchange — a waiting `/listen` returns `{"stopped":true}`. | No |
 | *natural finish* | You played to the end. | **Yes** |
 
@@ -36,9 +38,15 @@ The ready-**beep is on the listen side** (fires when the mic opens). The mic rec
 ## Non-negotiable rules
 1. **One fresh response per turn.** After `/listen`, reply to what was *actually said* — **never
    re-speak your previous line.** Silence-while-you-think is fine; repetition reads as "not listening."
-2. **Speak short. Loop until Stop.** Don't end after one turn.
-3. **Pause is the user's, not yours.** Never `/pause` to buy time — stay silent and process.
-4. **Don't time the beep.** `/say` is non-blocking and `/listen` waits for playback; just call `/say` then `/listen`. Give the HTTP call a generous timeout (≥120s).
+2. **Call `/listen` immediately after `/say`.** It waits at the playback gate while the no-beep
+   interruption listener monitors configured phrases.
+3. **Revise on interruption.** If `/listen` returns `interruption` context, address the new input
+   and preserve relevant unfinished content from `prior_response`. Do not replay wording already heard.
+4. **Speak short. Loop until Stop.** Don't end after one turn.
+5. **Pause is the user's, not yours.** Never `/pause` to buy time — stay silent and process.
+6. **Don't time the beep.** `/say` is non-blocking and `/listen` waits for playback; just call `/say` then `/listen`. Give the HTTP call a generous timeout (≥120s).
+7. **Do not use a configured interruption phrase as spoken filler.** It can self-trigger through
+   an open microphone.
 
 Everything else — the full HTTP API, playback backends (winsdk/SMTC headset routing), and the
 file map — is in [docs/VOICE_SYSTEM.md](docs/VOICE_SYSTEM.md). You need nothing outside this repo.

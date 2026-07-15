@@ -67,11 +67,12 @@ class TestResponseAnalyzer(unittest.TestCase):
         spec.loader.exec_module(mod)
 
 
-class TestVoiceServerCompiles(unittest.TestCase):
-    def test_voice_server_compiles(self):
-        """voice_server.py is valid Python syntax."""
-        path = os.path.join(ROOT, "voice_server.py")
-        py_compile.compile(path, doraise=True)
+class TestVoiceSourcesCompile(unittest.TestCase):
+    def test_voice_sources_compile(self):
+        """The listener, interruption helpers, and Voice App parse cleanly."""
+        for filename in ("voice_server.py", "voice_interrupt.py", "voice_app.py"):
+            with self.subTest(filename=filename):
+                py_compile.compile(os.path.join(ROOT, filename), doraise=True)
 
 
 if __name__ == "__main__":
