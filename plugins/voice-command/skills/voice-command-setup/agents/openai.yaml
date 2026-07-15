@@ -1,0 +1,12 @@
+interface:
+  display_name: "Voice Command Setup"
+  short_description: "Install and verify the local voice plugin"
+  default_prompt: "Use $voice-command-setup to enable and verify Voice Command here."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "voice"
+      description: "Local Voice-Command speech I/O server"
+      transport: "stdio"
+policy:
+  allow_implicit_invocation: true

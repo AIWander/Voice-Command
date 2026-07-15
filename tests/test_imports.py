@@ -5,6 +5,7 @@ import types
 import unittest
 import py_compile
 import os
+import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -71,7 +72,9 @@ class TestVoiceServerCompiles(unittest.TestCase):
     def test_voice_server_compiles(self):
         """voice_server.py is valid Python syntax."""
         path = os.path.join(ROOT, "voice_server.py")
-        py_compile.compile(path, doraise=True)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            compiled = os.path.join(temp_dir, "voice_server.pyc")
+            py_compile.compile(path, cfile=compiled, doraise=True)
 
 
 if __name__ == "__main__":

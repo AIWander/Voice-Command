@@ -1,0 +1,19 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "aiwander-voice-command",
+  "description": "Optional Voice-Command speech I/O plugin and operating skills.",
+  "owner": {
+    "name": "AIWander"
+  },
+  "plugins": [
+    {
+      "name": "voice-command",
+      "description": "Add local speech input and output without adding tool privileges.",
+      "author": {
+        "name": "AIWander"
+      },
+      "category": "productivity",
+      "source": "./plugins/voice-command"
+    }
+  ]
+}
