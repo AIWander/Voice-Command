@@ -39,10 +39,11 @@ installer\build-full-installer.cmd x64 C:\path\to\runtime-root 3.0.0
 
 The build script uses locked Cargo dependencies and a temporary target directory, then writes an unsigned `CPC-Voice-Setup-<arch>.exe` under `dist`. Signing and GitHub publication are separate owner actions.
 
-Use an appropriately licensed Inno Setup compiler for production builds. Inno
-Setup 6.7 can label an unlicensed compiler as non-commercial; review the
-[official commercial-license guidance](https://jrsoftware.org/isorder.php)
-before publishing a commercial installer.
+Inno Setup's base license permits commercial use. The vendor requests commercial
+users purchase a license but states that purchase is not strictly required.
+Record the publisher's support and compliance choice before commercial
+distribution; this is not a technical build blocker. See the
+[official commercial-license guidance](https://jrsoftware.org/isorder.php).
 
 ## Plugin-surface-only developer package
 
