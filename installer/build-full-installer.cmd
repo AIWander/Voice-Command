@@ -8,7 +8,7 @@ if not defined ARCH (
   if /I "%PROCESSOR_ARCHITECTURE%"=="ARM64" (set "ARCH=arm64") else (set "ARCH=x64")
 )
 if not defined RUNTIME_ROOT set "RUNTIME_ROOT=%VOICE_COMMAND_RUNTIME_ROOT%"
-if not defined APP_VERSION set "APP_VERSION=3.0.0"
+if not defined APP_VERSION set "APP_VERSION=3.1.0"
 
 if /I "%ARCH%"=="arm64" (
   set "RUST_TARGET=aarch64-pc-windows-msvc"
@@ -33,7 +33,7 @@ if not exist "%RUNTIME_ROOT%\Start-CPC-Voice.bat" (
   echo Missing runtime launcher: "%RUNTIME_ROOT%\Start-CPC-Voice.bat"
   exit /b 4
 )
-for %%F in (voice_app.py voice.config.toml) do (
+for %%F in (voice_app.py voice_interrupt.py voice.config.toml) do (
   if not exist "%RUNTIME_ROOT%\app\%%F" (
     echo Missing public runtime file: "%RUNTIME_ROOT%\app\%%F"
     exit /b 4

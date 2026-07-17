@@ -18,7 +18,7 @@ Under the hood it uses [faster-whisper](https://github.com/SYSTRAN/faster-whispe
 
 ---
 
-## 🔒 What stays local
+## What stays local
 
 Voice-Command's microphone capture, speech-to-text, silence detection, noise filtering, emotion detection, and audio playback run on your machine. The listening server binds to `localhost:5123`, not your LAN.
 
@@ -30,7 +30,7 @@ AIWander tools are local, user-authorized MCP capability surfaces. They do not g
 
 ---
 
-## 🖥️ Platform support
+## Platform support
 
 **Windows is the primary supported platform** (x64 and ARM64), and it now gets the **Voice App** — a single window that handles speech playback *and* listening, with pause/resume from your headset button. See [The Voice App](#the-voice-app-windows) below. **macOS** has an experimental source install path: the Python listener runs with Homebrew `portaudio`, `server.py` uses the built-in `afplay` player for TTS playback, and the Rust `voice-mcp` wrapper builds on both Intel and Apple Silicon — macOS uses the terminal listening server rather than the Voice App for now. For **Linux**, see the upstream [`AIWander/voice`](https://github.com/AIWander/voice) repo — there's a community fork there with Linux support.
 
@@ -146,7 +146,7 @@ If your AI doesn't have access to your filesystem and shell, scroll down to **Ma
 
 <!-- TODO: drop screenshot of voice_server.py running into docs/ and update this image link -->
 
-> 📸 *Screenshot of the voice listening server in action — coming soon. Once you've installed Voice-Command, the server window will look something like this, with a beep cue when it's your turn and a live RMS readout while you talk.*
+> *Screenshot of the voice listening server in action — coming soon. Once you've installed Voice-Command, the server window will look something like this, with a beep cue when it's your turn and a live RMS readout while you talk.*
 
 ---
 
@@ -264,7 +264,7 @@ The terminal listener works, but on Windows there's a nicer way: **the Voice App
   <img src="docs/voice-app.png" alt="The Voice App, paused mid-playback — amber paused banner, Resume button, and the live transcript" width="360">
 </p>
 
-> 📖 **Driving it from an AI agent?** See the [Voice System operating guide](docs/VOICE_SYSTEM.md) — the pause/interrupt/stop control model, the HTTP API on `:5123`, the playback backends, and the rules for running a clean voice exchange.
+> **Driving it from an AI agent?** See the [Voice System operating guide](docs/VOICE_SYSTEM.md) — the pause/interrupt/stop control model, the HTTP API on `:5123`, the playback backends, and the rules for running a clean voice exchange.
 
 ```
 START_VOICE_APP.bat
@@ -273,13 +273,14 @@ START_VOICE_APP.bat
 What you get:
 
 - **Pause the AI's voice with your headset button.** The app registers as a real Windows media session, so the play/pause button on your earbuds, headset, or keyboard pauses and resumes Claude's voice exactly like it would Spotify. There's a pause button in the window too (it turns amber while paused), and spacebar works.
-- **Pausing also pauses the conversation.** The switch back to listening is triggered by the *end of playback*, not the end of the AI's response — so while you have the voice paused, the mic stays off and the ready-beep waits. Unpause, let it finish, and listening starts on its own.
+- **Pausing holds the response in place.** The regular listener and ready-beep wait, while the no-beep interruption listener remains armed for your selected words. Resume continues from the same position.
+- **Say `umm` to take the floor without reaching for the widget.** The app pauses, the regular listener beeps, and you can add new information. Silence resumes the same audio; new speech gives the AI the prior response and playback position so it can answer the interruption without forgetting its unfinished point. The widget lets you replace `umm` with your own comma-separated phrases.
 - **The AI keeps working while you listen.** Speech is queued and played in the background, so the AI can keep using tools — or even finish its whole response — while you're still hearing it.
 - **Status at a glance**: speaking / paused / listening state, playback progress, live mic level, and a color-coded transcript of the conversation.
 
 It works on both **x64 and ARM64** Windows (on ARM64, build the `.venv` from x64 Python 3.11 — same note as the listener, `ctranslate2` doesn't ship ARM64 wheels). Native media-session support uses the `winsdk` package; if it isn't available the app falls back to an equivalent player with a media-key hook, and everything still works.
 
-The app serves the same `http://localhost:5123` API as the terminal listener (so the MCP wrapper auto-detects it), plus playback endpoints: `POST /say`, `/pause`, `/resume`, `/toggle`, `/skip`, `/stop`, and `GET /playback`.
+The app serves the same `http://localhost:5123` API as the terminal listener (so the MCP wrapper auto-detects it), plus playback and interruption endpoints: `POST /say`, `/pause`, `/resume`, `/toggle`, `/interrupt` (`/skip` alias), `/stop`, `/interruption-listener/config`, and `GET /playback` or `/interruption-listener`.
 
 On macOS, stick with `./START_VOICE_SERVER.sh` — the Voice App's media-session integration is Windows-only for now.
 
@@ -317,6 +318,15 @@ min_speech_duration_secs = 2.0
 rms_threshold = 100
 noise_filter_enabled = true
 pre_record_enabled = true
+
+[interruption_listener]
+enabled = true
+trigger_phrases = ["umm"]
+listen_while_paused = true
+window_secs = 1.5
+rms_threshold = 100.0
+cooldown_secs = 1.5
+empty_handoff_timeout_secs = 5.0
 ```
 
 > Earlier defaults of 4.0/3.0 felt sluggish in conversational use. For typing-replacement / dictating long prose, raise `silence_timeout_secs` to 5.0+ so natural pauses don't cut you off.
@@ -435,6 +445,11 @@ cargo build --release
 ```
 
 The compiled binary lands in `voice-mcp/target/release/voice-mcp.exe` on Windows and `voice-mcp/target/release/voice-mcp` on macOS. Move it wherever you like and point `claude_desktop_config.json` at it.
+
+On Windows, `scripts\build-x64.bat` is the reproducible x64 path. It loads the
+Visual Studio x64 toolchain, builds `x86_64-pc-windows-msvc` in
+`C:\temp\rust-build-staged\voice-command`, and stages
+`dist\voice-mcp-x64.exe` without replacing an installed server.
 
 You'll need a [Rust toolchain](https://rustup.rs/) installed. Building takes a couple of minutes on a modern machine. The release workflow on tag push builds ARM64 and x64 binaries for Windows and macOS automatically.
 

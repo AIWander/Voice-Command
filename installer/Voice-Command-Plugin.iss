@@ -10,7 +10,7 @@
   #error VoiceExe must point to a built voice-mcp executable.
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.3.1"
+  #define AppVersion "0.4.0"
 #endif
 #define RepoRoot SourcePath + ".."
 #define PluginRoot RepoRoot + "\plugins\voice-command"
