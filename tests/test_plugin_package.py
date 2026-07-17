@@ -48,6 +48,22 @@ def test_manifests_and_mcp_registration_are_consistent():
     }
 
 
+def test_installer_versions_and_interruption_payload_follow_the_components():
+    cargo = tomllib.loads((ROOT / "voice-mcp" / "Cargo.toml").read_text(encoding="utf-8"))
+    wrapper_version = cargo["package"]["version"]
+    plugin_iss = (ROOT / "installer" / "Voice-Command-Plugin.iss").read_text(encoding="utf-8")
+    full_iss = (ROOT / "installer" / "Voice-Command-Full.iss").read_text(encoding="utf-8")
+    full_build = (ROOT / "installer" / "build-full-installer.cmd").read_text(encoding="utf-8")
+    installer_readme = (ROOT / "installer" / "README.md").read_text(encoding="utf-8")
+
+    assert f'#define AppVersion "{wrapper_version}"' in plugin_iss
+    assert '#define AppVersion "3.1.0"' in full_iss
+    assert 'APP_VERSION set "APP_VERSION=3.1.0"' in full_build
+    assert "voice_interrupt.py" in full_iss
+    assert "voice_interrupt.py voice.config.toml" in full_build
+    assert "voice_interrupt.py" in installer_readme
+
+
 def test_two_concise_voice_skills_have_valid_names():
     skill_paths = sorted(PLUGIN.glob("skills/*/SKILL.md"))
     assert [path.parent.name for path in skill_paths] == [

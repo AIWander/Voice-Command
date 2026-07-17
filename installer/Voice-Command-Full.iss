@@ -13,7 +13,7 @@
   #error RuntimeRoot must contain python, models, app, and Start-CPC-Voice.bat.
 #endif
 #ifndef AppVersion
-  #define AppVersion "3.0.0"
+  #define AppVersion "3.1.0"
 #endif
 #define RepoRoot SourcePath + ".."
 #define PluginRoot RepoRoot + "\plugins\voice-command"
@@ -55,6 +55,7 @@ Name: desktopicon; Description: "Create a desktop shortcut"; GroupDescription: "
 Source: "{#RuntimeRoot}\python\*"; DestDir: "{app}\python"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#RuntimeRoot}\models\*"; DestDir: "{app}\models"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#RuntimeRoot}\app\voice_app.py"; DestDir: "{app}\app"; Flags: ignoreversion
+Source: "{#RuntimeRoot}\app\voice_interrupt.py"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "{#RuntimeRoot}\app\voice.config.toml"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "{#RuntimeRoot}\Start-CPC-Voice.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#VoiceExe}"; DestDir: "{app}"; DestName: "voice.exe"; Flags: ignoreversion

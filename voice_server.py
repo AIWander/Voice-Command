@@ -11,8 +11,10 @@ Features:
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
 import pyaudio
+from pathlib import Path
 import struct
 import traceback
+import tomllib
 import wave
 import os
 import tempfile
@@ -45,8 +47,6 @@ END_PHRASES = [
 # ═══════════════════════════════════════════════════════════════════
 # CONFIG
 # ═══════════════════════════════════════════════════════════════════
-import tomllib
-from pathlib import Path
 
 def _find_config():
     candidates = [
@@ -110,11 +110,11 @@ def apply_noise_filter(samples, sample_rate=16000):
     # Highpass at 80Hz - removes low frequency hum/rumble
     b_hp, a_hp = butter_highpass(80, sample_rate)
     filtered = lfilter(b_hp, a_hp, samples)
-    
+
     # Lowpass at 7500Hz - removes high frequency noise (must be < Nyquist)
     b_lp, a_lp = butter_lowpass(7500, sample_rate)
     filtered = lfilter(b_lp, a_lp, filtered)
-    
+
     return filtered.astype(np.int16)
 
 # ═══════════════════════════════════════════════════════════════════
@@ -124,17 +124,17 @@ def extract_audio_features(samples, sample_rate=16000):
     """Extract features for emotion detection"""
     samples = samples.astype(np.float32) / 32768.0  # Normalize
     n = len(samples)
-    
+
     if n == 0:
         return None
-    
+
     # 1. Energy (RMS)
     energy = np.sqrt(np.mean(samples ** 2))
-    
+
     # 2. Zero Crossing Rate
     zero_crossings = np.sum(np.abs(np.diff(np.sign(samples)))) / 2
     zcr = zero_crossings / n
-    
+
     # 3. Spectral Centroid (brightness)
     fft_size = 2048
     spectral_centroids = []
@@ -142,13 +142,13 @@ def extract_audio_features(samples, sample_rate=16000):
         chunk = samples[i:i + fft_size]
         spectrum = np.abs(fft(chunk)[:fft_size // 2])
         freqs = np.arange(fft_size // 2)
-        
+
         if np.sum(spectrum) > 0:
             centroid = np.sum(freqs * spectrum) / np.sum(spectrum)
             spectral_centroids.append(centroid)
-    
+
     spectral_centroid = np.mean(spectral_centroids) if spectral_centroids else 0
-    
+
     # 4. Pitch variance via autocorrelation
     frame_size = 1024
     pitches = []
@@ -156,26 +156,26 @@ def extract_audio_features(samples, sample_rate=16000):
         chunk = samples[i:i + frame_size]
         corr = np.correlate(chunk, chunk, mode='full')
         corr = corr[len(corr) // 2:]
-        
+
         # Find first peak after initial decay
         min_lag = sample_rate // 500  # Max 500Hz
         max_lag = sample_rate // 50   # Min 50Hz
-        
+
         if max_lag < len(corr):
             peak_idx = np.argmax(corr[min_lag:max_lag]) + min_lag
             if corr[peak_idx] > 0.1:
                 pitch = sample_rate / peak_idx
                 pitches.append(pitch)
-    
+
     pitch_variance = np.std(pitches) if len(pitches) > 1 else 0
-    
+
     # 5. Speech rate estimate (voiced frame ratio)
     frame_ms = 20
     frame_samples = sample_rate * frame_ms // 1000
     energy_threshold = energy * 0.3
     voiced_frames = 0
     total_frames = 0
-    
+
     for i in range(0, n, frame_samples):
         chunk = samples[i:i + frame_samples]
         if len(chunk) > 0:
@@ -183,10 +183,10 @@ def extract_audio_features(samples, sample_rate=16000):
             if frame_energy > energy_threshold:
                 voiced_frames += 1
             total_frames += 1
-    
+
     duration_secs = n / sample_rate
     speech_rate = (voiced_frames * 0.15) / duration_secs if duration_secs > 0 else 0
-    
+
     return {
         'energy': float(energy),
         'zero_crossing_rate': float(zcr),
@@ -199,7 +199,7 @@ def detect_emotion(features):
     """Classify emotion from audio features"""
     if not features:
         return {'primary': 'neutral', 'confidence': 0.5, 'features': {}}
-    
+
     # Normalize features to 0-1 range (calibrated 2026-01-21)
     # Raw values: energy ~0.003-0.006, pitch_var 0-25, rate 1-5, centroid 230-320, zcr 0.13-0.17
     norm_energy = min(features['energy'] * 180, 1.0)      # Was *10, too low
@@ -207,13 +207,13 @@ def detect_emotion(features):
     norm_rate = min(features['speech_rate'] / 6, 1.0)     # Adjusted for typical 2-5 range
     norm_centroid = min(features['spectral_centroid'] / 400, 1.0)  # Was /200, always maxed
     norm_zcr = min(features['zero_crossing_rate'] * 4, 1.0)  # Was *20, way too aggressive
-    
+
     # Arousal = activation level (high energy + fast + rough)
     arousal = (norm_energy + norm_rate + norm_zcr) / 3
-    
+
     # Valence indicator (pitch variance suggests expressiveness)
     valence = norm_pitch_var - norm_zcr * 0.5
-    
+
     # Rule-based classification
     if arousal > 0.7:
         if valence > 0.3:
@@ -236,7 +236,7 @@ def detect_emotion(features):
         else:
             emotion = 'neutral'
             confidence = 0.6
-    
+
     return {
         'primary': emotion,
         'confidence': min(confidence, 0.95),
@@ -272,7 +272,7 @@ print("[Voice] Model loaded!")
 class VoiceHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         print(f"[Voice] {args[0]}")
-    
+
     def do_POST(self):
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
@@ -289,11 +289,11 @@ class VoiceHandler(BaseHTTPRequestHandler):
             self.send_json(result)
         else:
             self.send_json({'success': False, 'error': 'Unknown endpoint'})
-    
+
     def do_GET(self):
         if self.path == '/status':
             self.send_json({
-                'success': True, 
+                'success': True,
                 'status': 'running',
                 'version': '2.0',
                 'features': [
@@ -306,13 +306,13 @@ class VoiceHandler(BaseHTTPRequestHandler):
             })
         else:
             self.send_json({'success': False, 'error': 'Use POST /listen'})
-    
+
     def send_json(self, data):
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')
         self.end_headers()
         self.wfile.write(json.dumps(data).encode())
-    
+
     def capture_voice(self, max_duration, skip_emotion=False, skip_filter=False, silence_timeout=None, min_speech_duration=None, rms_threshold=None):
         cfg = get_listen_defaults()
         silence_timeout = silence_timeout if silence_timeout is not None else cfg["silence_timeout"]
@@ -379,17 +379,17 @@ class VoiceHandler(BaseHTTPRequestHandler):
 
             if not has_speech:
                 return {'success': False, 'error': 'No speech detected'}
-            
+
             # ─────────────────────────────────────────────────────
             # NOISE FILTERING
             # ─────────────────────────────────────────────────────
             audio_data = b''.join(all_frames)
             samples_array = np.frombuffer(audio_data, dtype=np.int16)
-            
+
             if not skip_filter:
                 print("[Voice] Applying noise filter...")
                 samples_array = apply_noise_filter(samples_array, SAMPLE_RATE)
-            
+
             # ─────────────────────────────────────────────────────
             # EMOTION DETECTION
             # ─────────────────────────────────────────────────────
@@ -399,7 +399,7 @@ class VoiceHandler(BaseHTTPRequestHandler):
                 features = extract_audio_features(samples_array, SAMPLE_RATE)
                 emotion_result = detect_emotion(features)
                 print(f"[Voice] Emotion: {emotion_result['primary']} ({emotion_result['confidence']:.0%})")
-            
+
             # ─────────────────────────────────────────────────────
             # SAVE & TRANSCRIBE
             # ─────────────────────────────────────────────────────
@@ -409,18 +409,18 @@ class VoiceHandler(BaseHTTPRequestHandler):
                 wf.setsampwidth(2)
                 wf.setframerate(SAMPLE_RATE)
                 wf.writeframes(samples_array.tobytes())
-            
+
             print("[Voice] Transcribing with Whisper...")
             segments, info = model.transcribe(temp_path, beam_size=5)
             text = " ".join([seg.text for seg in segments]).strip()
-            
+
             os.unlink(temp_path)
-            
+
             if not text:
                 return {'success': False, 'error': 'Could not understand audio', 'emotion': emotion_result}
-            
+
             print(f"[Voice] Transcribed: {text}")
-            
+
             # ─────────────────────────────────────────────────────
             # STRIP END PHRASES
             # ─────────────────────────────────────────────────────
@@ -429,13 +429,13 @@ class VoiceHandler(BaseHTTPRequestHandler):
                 if text_lower.endswith(phrase):
                     text = text[:-(len(phrase))].strip().rstrip('.,!?')
                     break
-            
+
             result = {'success': True, 'text': text}
             if emotion_result:
                 result['emotion'] = emotion_result
-            
+
             return result
-                
+
         except Exception as e:
             print(f"[Voice] Error: {e}")
             traceback.print_exc()
@@ -466,7 +466,7 @@ def main():
     print("Leave this window open. Claude will call /listen")
     print("Press Ctrl+C to stop.")
     print()
-    
+
     try:
         server.serve_forever()
     except KeyboardInterrupt:

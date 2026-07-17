@@ -27,14 +27,16 @@ runtime-root/
   models/
   app/
     voice_app.py
+    voice_interrupt.py
+    voice.config.toml
   Start-CPC-Voice.bat
 ```
 
 Build on Windows with Rust and Inno Setup 6:
 
 ```bat
-installer\build-full-installer.cmd arm64 C:\path\to\runtime-root 3.0.0
-installer\build-full-installer.cmd x64 C:\path\to\runtime-root 3.0.0
+installer\build-full-installer.cmd arm64 C:\path\to\runtime-root 3.1.0
+installer\build-full-installer.cmd x64 C:\path\to\runtime-root 3.1.0
 ```
 
 The build script uses locked Cargo dependencies and a temporary target directory, then writes an unsigned `CPC-Voice-Setup-<arch>.exe` under `dist`. Signing and GitHub publication are separate owner actions.
