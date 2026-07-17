@@ -15,7 +15,6 @@ jobs:
           python-version: "3.11"
       - run: pip install ruff
       - run: ruff check . --output-format=github
-        continue-on-error: true
 
   syntax:
     runs-on: ${{ matrix.os }}
