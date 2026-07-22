@@ -4,6 +4,9 @@
 
 **Talk to your AI. Hear it work.**
 
+**Website: [aivoicemcp.com](https://aivoicemcp.com)** — see the two-listener handoff, hear the
+three-beep turn cue, and try the widget controls without opening your microphone.
+
 **Part of [CPC](https://github.com/AIWander) (Copy Paste Compute)** and the free core trio
 with [AI-Hands](https://github.com/AIWander/AI-Hands) and
 [Programmer-Wander](https://github.com/AIWander/Programmer-Wander).

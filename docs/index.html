@@ -1,175 +1,247 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Voice-Command — Talk to your AI. Hear it work.</title>
-<meta name="description" content="A local voice layer for any AI that speaks MCP. Faster-whisper for ears, edge-tts for mouth. Your voice stays on your computer.">
-<meta property="og:title" content="Voice-Command">
-<meta property="og:description" content="Talk to your AI. Hear it work. A local voice layer for any AI that speaks MCP.">
-<meta property="og:type" content="website">
-<meta property="og:url" content="https://voice.aiwander.ai">
-<link rel="canonical" href="https://voice.aiwander.ai">
-<style>
-:root{
-  --bg:#0f1117; --bg-2:#1a1d27; --bg-3:#232634;
-  --fg:#e6e8ee; --fg-dim:#9aa0ad; --fg-faint:#6b7280;
-  --accent:#22c55e; --accent-soft:rgba(34,197,94,0.12); --accent-border:rgba(34,197,94,0.35);
-  --rule:#2a2e3a
-}
-*{box-sizing:border-box}
-html,body{margin:0;padding:0}
-body{background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased}
-.wrap{max-width:760px;margin:0 auto;padding:56px 24px 96px}
-.topbar{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--fg-dim);margin-bottom:64px}
-.topbar a{color:var(--fg-dim);text-decoration:none;margin-left:18px}
-.topbar a:hover{color:var(--accent)}
-.brand{font-weight:600;color:var(--fg);letter-spacing:.5px}
-.brand-mark{color:var(--accent)}
-h1.hero{font-size:42px;font-weight:600;line-height:1.15;margin:0 0 18px;letter-spacing:-.01em}
-.hero-sub{font-size:18px;color:var(--fg-dim);margin:0 0 8px;max-width:620px}
-.hero-meta{font-size:13px;color:var(--fg-faint);margin:0 0 36px;text-transform:uppercase;letter-spacing:.08em}
-.hero-actions{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:56px}
-.btn{display:inline-flex;align-items:center;gap:8px;padding:11px 18px;border-radius:8px;font-size:14px;font-weight:500;text-decoration:none;border:1px solid var(--rule);color:var(--fg);transition:border-color .15s,background .15s}
-.btn:hover{border-color:var(--accent);background:var(--accent-soft)}
-.btn-primary{background:var(--accent-soft);border-color:var(--accent-border);color:var(--accent)}
-.btn-primary:hover{background:var(--accent);color:#0a0c12}
-.section-label{font-size:12px;font-weight:600;color:var(--accent);letter-spacing:.12em;text-transform:uppercase;margin:64px 0 18px;padding-bottom:10px;border-bottom:1px solid var(--rule)}
-article h2{font-size:24px;font-weight:600;margin:40px 0 14px;letter-spacing:-.005em}
-article p{margin:0 0 18px}
-article strong{color:#fff;font-weight:600}
-article em{color:#c9cdd6}
-article code{background:var(--bg-2);border:1px solid var(--rule);padding:2px 6px;border-radius:4px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em}
-article a{color:var(--accent);text-decoration:none;border-bottom:1px solid transparent}
-article a:hover{border-bottom-color:var(--accent)}
-.card-grid{display:grid;gap:14px;margin-top:4px}
-.card{display:block;padding:18px 20px;background:var(--bg-2);border:1px solid var(--rule);border-radius:10px;text-decoration:none;color:var(--fg);transition:border-color .15s,background .15s,transform .15s}
-.card:hover{border-color:var(--accent-border);background:var(--bg-3);transform:translateX(2px)}
-.card-label{font-size:11px;color:var(--accent);font-weight:600;letter-spacing:.1em;margin-bottom:6px}
-.card-title{font-size:16px;font-weight:500;margin-bottom:6px}
-.card-blurb{font-size:14px;color:var(--fg-dim);margin:0}
-.pre{background:var(--bg-2);border:1px solid var(--rule);border-radius:8px;padding:14px 18px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px;line-height:1.55;overflow-x:auto;color:var(--fg);margin:0 0 20px}
-.pre-label{display:block;font-size:11px;color:var(--fg-faint);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px}
-ol.flow{counter-reset:step;list-style:none;padding:0;margin:0 0 24px}
-ol.flow li{position:relative;padding-left:38px;margin-bottom:14px;counter-increment:step}
-ol.flow li::before{content:counter(step);position:absolute;left:0;top:0;width:24px;height:24px;border-radius:50%;background:var(--accent-soft);border:1px solid var(--accent-border);color:var(--accent);font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center}
-.callout{padding:16px 20px;background:var(--bg-2);border-left:3px solid var(--accent);border-radius:6px;margin:24px 0;color:var(--fg-dim);font-size:15px}
-.callout strong{color:var(--fg)}
-footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-size:13px;color:var(--fg-faint);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
-footer a{color:var(--fg-faint);text-decoration:none}
-footer a:hover{color:var(--accent)}
-@media (max-width:560px){
-  .wrap{padding:32px 20px 64px}
-  h1.hero{font-size:32px}
-  .hero-sub{font-size:16px}
-}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Voice MCP — Natural voice control for MCP agents</title>
+  <meta name="description" content="Talk to your AI, pause it, interrupt naturally, and keep the thread. A local Windows voice layer for authorized MCP clients.">
+  <meta name="theme-color" content="#0a0a10">
+  <meta property="og:title" content="AI Voice MCP">
+  <meta property="og:description" content="Talk to your AI. Interrupt naturally. Keep the thread.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://aivoicemcp.com/">
+  <link rel="canonical" href="https://aivoicemcp.com/">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="site.css">
+  <script src="site.js" defer></script>
 </head>
 <body>
-<div class="wrap">
+  <a class="skip-link" href="#main">Skip to content</a>
 
-  <div class="topbar">
-    <span class="brand"><span class="brand-mark">●</span> voice<span class="brand-mark">.</span>aiwander.ai</span>
-    <nav>
-      <a href="https://aiwander.ai" target="_blank" rel="noopener">AIWander</a>
-      <a href="https://github.com/AIWander/Voice-Command" target="_blank" rel="noopener">GitHub</a>
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="AI Voice MCP home">
+      <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+      <span>AI Voice MCP</span>
+    </a>
+    <nav aria-label="Primary navigation">
+      <a href="#flow">How it works</a>
+      <a href="#controls">Controls</a>
+      <a href="#install">Install</a>
+      <a class="nav-github" href="https://github.com/AIWander/Voice-Command">GitHub</a>
     </nav>
-  </div>
+  </header>
 
-  <h1 class="hero">Talk it out.<br>Take command.<br>Voice-Command.</h1>
-  <p class="hero-sub">Talk to your AI as you cook. Command your AI as you're doing the dishes. Get updates on what your AI is doing with just your earpiece. Hands-free for hands-busy moments.</p>
-  <p class="hero-meta">Windows · Apache-2.0 licensed · Works with Claude, Codex, Gemini, LM Studio</p>
+  <main id="main">
+    <section class="hero shell" id="top">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="live-dot" aria-hidden="true"></span> Local voice for authorized MCP clients</p>
+        <h1>Talk to your AI.<br><span>Interrupt naturally.</span><br>Keep the thread.</h1>
+        <p class="lede">AI Voice MCP turns a typed agent loop into a real spoken exchange. Hear the answer, pause it, say a chosen interruption phrase, or take the floor with one click. The next response remembers what was being said and adapts to your new input.</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="#install">Install Voice Command</a>
+          <a class="button button-secondary" href="https://github.com/AIWander/Voice-Command">View source</a>
+        </div>
+        <ul class="hero-facts" aria-label="Product facts">
+          <li>Windows x64 and ARM64</li>
+          <li>Local speech recognition</li>
+          <li>Apache-2.0</li>
+        </ul>
+      </div>
 
-  <div class="hero-actions">
-    <a class="btn btn-primary" href="https://github.com/AIWander/Voice-Command#the-easy-way-to-install-ask-your-ai-to-do-it">Install</a>
-    <a class="btn" href="https://github.com/AIWander/Voice-Command" target="_blank" rel="noopener">GitHub</a>
-    <a class="btn" href="https://github.com/AIWander/Voice-Command/releases/latest" target="_blank" rel="noopener">Latest release</a>
-  </div>
+      <div class="voice-widget" aria-label="Interactive Voice App demonstration">
+        <div class="widget-topline">
+          <div>
+            <p class="widget-kicker">VOICE APP</p>
+            <h2>Conversation control</h2>
+          </div>
+          <span class="model-ready"><span></span> Whisper ready</span>
+        </div>
 
-  <div class="section-label">What it is</div>
-  <article>
-    <p>You talk, your AI does the thing. Voice adds no new privileges; it only invokes tools the user has already installed and enabled. Sensitive actions should require confirmation. If your AI can do it typed, you can ask for it spoken.</p>
-    <p>The voice layer doesn't add new capabilities. It just changes how you reach the ones your AI already has. Same connectors. Same MCPs. Same tools. Same permission boundaries. You're just using your mouth instead of your keyboard.</p>
+        <div class="voice-state" id="voice-state" data-state="speaking" aria-live="polite">
+          <span class="state-orb" aria-hidden="true"></span>
+          <div>
+            <strong id="state-title">Speaking</strong>
+            <span id="state-detail">Silent interruption listener armed</span>
+          </div>
+          <time id="playback-time">00:18 / 00:42</time>
+        </div>
 
-    <h2>What stays local</h2>
-    <p>Microphone capture, speech-to-text, silence detection, noise filtering, emotion detection, and audio playback run on your machine. The listening server binds to <code>localhost:5123</code>, not your LAN. Text-to-speech currently uses <code>edge-tts</code>, which calls Microsoft Edge's online TTS service. Your AI still reaches out for its own model calls (Claude pings Anthropic, ChatGPT pings OpenAI), and tools it calls might too (web search, email connectors). For a fully offline loop, pair this with a local model and replace <code>edge-tts</code> with a local TTS backend.</p>
-    <h2>Safe Use / Permission Model</h2>
-    <p>AIWander tools are local, user-authorized MCP capability surfaces. They do not grant an AI new permissions by themselves. They expose tools the user explicitly installs and enables. Sensitive actions should be confirmed by the user, credentials should stay in the OS keyring or local vault, and demos should use mock data.</p>
-  </article>
+        <div class="progress" aria-label="Playback progress"><span id="progress-bar"></span></div>
 
-  <div class="section-label">How a turn works</div>
-  <article>
-    <ol class="flow">
-      <li><strong>You hear a series of beeps.</strong> That's the AI's "I'm listening, your turn" cue.</li>
-      <li><strong>You talk.</strong> Anything your AI has the tools and authorization to handle counts.</li>
-      <li><strong>The AI works — and tells you out loud what it's doing as it goes.</strong> ("Checking your calendar… found three events tomorrow… drafting the reply…")</li>
-      <li><strong>You hear the beeps again.</strong> The AI's done with that turn. Your move.</li>
-    </ol>
-    <p>One thing to know: the audio flow is one-way at a time. You can't cut the AI off mid-sentence with your voice — once it's talking or working, the only way to interrupt is to click or tap in the AI's UI. The beeps are the only handoff signal.</p>
-    <p>To end a session, just tell the AI you're done. <em>"I'm done talking,"</em> <em>"let's talk later,"</em> <em>"bye for now"</em> — anything in that family. Or hit stop in your AI's UI. Both work.</p>
-  </article>
+        <div class="widget-controls" aria-label="Voice playback controls">
+          <button type="button" data-control="pause" id="pause-control">Pause</button>
+          <button type="button" data-control="interrupt">Interrupt / Skip</button>
+          <button type="button" data-control="stop">Stop</button>
+        </div>
 
-  <div class="section-label">Install</div>
-  <article>
-    <p>You shouldn't need a CS degree to get this running. If you've got Claude Desktop, Cowork, Claude Code, Codex (the Windows app), Gemini CLI, or LM Studio open right now, just copy this and paste it to your AI:</p>
-    <div class="pre"><span class="pre-label">paste to your AI</span>https://github.com/AIWander/Voice-Command — Can you install this MCP for us to use here, set up the voice listening server, and make me a .bat to launch it. Walk me through any restart or step I need. Tell me when everything's installed and we're ready to talk.</div>
-    <p>Your AI will grab the right <code>voice-mcp.exe</code> for your machine (ARM64 or x64), drop it in <code>%LOCALAPPDATA%\CPC\servers\</code>, wire it into your client's MCP config (backed up first), install the Python pieces, and write you a <code>START_VOICE_SERVER.bat</code> you can double-click whenever you want to talk.</p>
-    <p>If your AI can run scripts but isn't great at multi-step shell flows, point it at <a href="https://github.com/AIWander/Voice-Command/blob/main/install.ps1"><code>install.ps1</code></a> instead — it does the whole install loop deterministically.</p>
+        <label class="phrase-control" for="wake-phrase">
+          <span>Interruption phrase</span>
+          <input id="wake-phrase" name="wake-phrase" value="umm" maxlength="32" autocomplete="off">
+        </label>
 
-    <h2>Verify by saying hi</h2>
-    <p>Skip the formal health check. Just use the tools themselves. Ask your AI:</p>
-    <div class="callout"><strong>"Say hi out loud and then listen for me."</strong></div>
-    <p>If you hear the AI greet you and then hear the listening <strong>beep</strong>, you're wired up end-to-end. Talk back to confirm it transcribed you. If something's broken, you'll know exactly which half:</p>
-    <ul>
-      <li><strong>No voice</strong> → TTS is off. ffmpeg missing, or your audio output device is wrong.</li>
-      <li><strong>Voice but no beep</strong> → MCP wiring worked for <code>speak</code>, not for <code>listen_for_speech</code>. Config has the entry but <code>voice_server.py</code> isn't running.</li>
-      <li><strong>Beep but no transcription</strong> → microphone permission off, or mic device not picked up. Most installs have it on by default; if not, Windows Settings → Privacy &amp; security → Microphone → "Let desktop apps access your microphone".</li>
-      <li><strong>Full round-trip works</strong> → done. Talk away.</li>
-    </ul>
-  </article>
+        <div class="transcript" id="demo-transcript">
+          <p><span>AI</span> I can compare those options and then walk you through the strongest one—</p>
+        </div>
 
-  <div class="section-label">Pairs nicely with</div>
-  <article>
-    <p>Voice-Command is most useful when your AI also has hands. Three companion MCPs — all local, all callable by voice once you're wired up — give your AI the rest of the body it needs.</p>
-    <div class="card-grid">
-      <a class="card" href="https://github.com/AIWander/ops" target="_blank" rel="noopener">
-        <div class="card-label">OPS</div>
-        <div class="card-title">File and shell operations</div>
-        <p class="card-blurb">Read/write files, run commands, manage processes. The recommended operator MCP — install this first if you don't have one yet.</p>
-      </a>
-      <a class="card" href="https://github.com/AIWander/hands" target="_blank" rel="noopener">
-        <div class="card-label">HANDS</div>
-        <div class="card-title">Browser, Windows UI, vision</div>
-        <p class="card-blurb">Drive Chrome through every channel — DOM, accessibility tree, network capture, JS eval. Plus Windows UIA and vision/OCR.</p>
-      </a>
+        <div class="demo-actions">
+          <button class="demo-button" type="button" id="simulate-interruption">Simulate phrase handoff</button>
+          <button class="cue-button" type="button" id="play-cue" aria-label="Play the three-beep listening cue">
+            <span class="cue-bars" aria-hidden="true"><i></i><i></i><i></i></span>
+            Hear your-turn cue
+          </button>
+        </div>
+        <p class="demo-note">Interactive product model. It never opens your microphone.</p>
+      </div>
+    </section>
+
+    <section class="trust-strip" aria-label="Compatibility">
+      <div class="shell trust-inner">
+        <span>Works with MCP-capable clients</span>
+        <strong>Codex</strong>
+        <strong>Claude</strong>
+        <strong>Gemini CLI</strong>
+        <strong>LM Studio</strong>
+        <strong>Local models</strong>
+      </div>
+    </section>
+
+    <section class="section shell" id="flow">
+      <div class="section-heading">
+        <p class="eyebrow">The two-listener loop</p>
+        <h2>Your turn starts with a beep.<br>Your interruption starts in silence.</h2>
+        <p>One shared microphone and one shared Whisper model move between two distinct listening modes. There is no competing second process and no lost response context.</p>
+      </div>
+
+      <ol class="flow-grid">
+        <li>
+          <span class="step-number">01</span>
+          <h3>The AI speaks</h3>
+          <p>Playback starts. A no-beep phrase listener quietly watches only for words you selected.</p>
+        </li>
+        <li>
+          <span class="step-number">02</span>
+          <h3>You say “umm”</h3>
+          <p>The default phrase pauses playback exactly where it is and yields the microphone.</p>
+        </li>
+        <li>
+          <span class="step-number">03</span>
+          <h3>The cue sounds</h3>
+          <p>The regular full-transcription listener opens and plays the familiar three-beep “your turn” cue.</p>
+        </li>
+        <li>
+          <span class="step-number">04</span>
+          <h3>The conversation adapts</h3>
+          <p>Silence resumes the same audio. New speech replaces the unheard remainder and returns the prior context so the AI can revise, not restart.</p>
+        </li>
+      </ol>
+    </section>
+
+    <section class="section shell" id="controls">
+      <div class="section-heading narrow">
+        <p class="eyebrow">You own the floor</p>
+        <h2>Four controls. Four clear meanings.</h2>
+      </div>
+      <div class="control-grid">
+        <article class="control-card">
+          <span class="control-label">HOLD</span>
+          <h3>Pause</h3>
+          <p>Freezes playback in place. Resume continues. Pause alone never opens the regular microphone.</p>
+        </article>
+        <article class="control-card">
+          <span class="control-label">MY TURN</span>
+          <h3>Interrupt / Skip</h3>
+          <p>Discards unheard audio, sounds the listening cue, and gives you the floor immediately.</p>
+        </article>
+        <article class="control-card featured">
+          <span class="control-label">NATURAL BARGE-IN</span>
+          <h3>Your phrase</h3>
+          <p>Say “umm” or choose another phrase. It triggers silently during playback or while held on Pause.</p>
+        </article>
+        <article class="control-card">
+          <span class="control-label">END</span>
+          <h3>Stop</h3>
+          <p>Ends playback and the exchange. Nothing keeps listening after you stop the session.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section magic-section">
+      <div class="shell magic-grid">
+        <div class="section-heading">
+          <p class="eyebrow">The context-preserving part</p>
+          <h2>It does not forget the answer it was in the middle of giving.</h2>
+          <p>When you add something new, Voice Command returns the unheard response, playback position, queued context, and your interruption to the connected AI. The AI can address your new point while preserving whatever still matters from the original answer.</p>
+        </div>
+        <div class="context-card" aria-label="Interruption context example">
+          <div class="context-row muted">
+            <span>PRIOR RESPONSE</span>
+            <p>“There are three routes. The first is fastest, while the second gives you…”</p>
+          </div>
+          <div class="context-arrow" aria-hidden="true"></div>
+          <div class="context-row user-row">
+            <span>YOU INTERRUPT</span>
+            <p>“Umm—only compare the options that work offline.”</p>
+          </div>
+          <div class="context-arrow" aria-hidden="true"></div>
+          <div class="context-row answer-row">
+            <span>REVISED RESPONSE</span>
+            <p>“That narrows it to two. Here is the faster offline option first…”</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section shell privacy-section">
+      <div class="privacy-card">
+        <div>
+          <p class="eyebrow">Local boundary</p>
+          <h2>Your microphone is not a website feature.</h2>
+        </div>
+        <div>
+          <p>Microphone capture, faster-whisper transcription, silence detection, phrase matching, and playback control run on your Windows computer. The listener binds to <code>localhost:5123</code>, not your LAN or this public site.</p>
+          <p>Text-to-speech uses Edge TTS by default and therefore reaches Microsoft’s online TTS service. You can replace it with a local backend. Voice adds no new tool privileges; sensitive actions still use the permissions and confirmation boundaries of your AI client.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section shell" id="install">
+      <div class="install-panel">
+        <div>
+          <p class="eyebrow">Install with your AI</p>
+          <h2>Paste one request. Let your coding agent do the setup.</h2>
+          <p>The repository supports Windows x64 and ARM64. Your agent should back up existing MCP configuration, install the local Voice App, wire the Voice MCP server, and tell you which manual reopen step remains.</p>
+        </div>
+        <div class="prompt-box">
+          <div class="prompt-topline">
+            <span>PASTE TO YOUR CODING AGENT</span>
+            <button type="button" id="copy-prompt">Copy</button>
+          </div>
+          <p id="install-prompt">Install AIWander/Voice-Command for this computer. Set up the local Voice App and Voice MCP, preserve and back up my current configuration, choose the correct Windows architecture, do not restart or close anything for me, and verify the install before telling me what I need to reopen manually.</p>
+        </div>
+        <div class="install-actions">
+          <a class="button button-primary" href="https://github.com/AIWander/Voice-Command#the-easy-way-to-install-ask-your-ai-to-do-it">Open install guide</a>
+          <a class="button button-secondary" href="https://github.com/AIWander/Voice-Command/blob/main/docs/VOICE_SYSTEM.md">Read the voice system</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="shell footer-inner">
+      <div>
+        <a class="brand footer-brand" href="#top">
+          <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+          <span>AI Voice MCP</span>
+        </a>
+        <p>Voice Command by AIWander. Local voice I/O for authorized MCP clients.</p>
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/AIWander/Voice-Command">GitHub</a>
+        <a href="https://github.com/AIWander/Voice-Command/issues">Issues</a>
+        <a href="https://aiwander.ai">AIWander</a>
+      </div>
+      <p class="copyright">Apache-2.0 licensed · Copyright 2026 AIWander</p>
     </div>
-    <p style="margin-top:24px">Install any combination. Voice-Command is the mouth and ears; these are the rest of the body. These tools run locally, but the actions they perform can still touch files, browsers, APIs, email, or shell commands depending on what you have enabled.</p>
-  </article>
-
-  <div class="section-label">Works with</div>
-  <article>
-    <p>Voice-Command is a STDIO MCP server, so it plugs into any AI client that speaks MCP. That includes:</p>
-    <ul>
-      <li><strong>Claude</strong> (chat) — Claude Desktop and the web app</li>
-      <li><strong>Cowork</strong> — Claude's desktop agent</li>
-      <li><strong>Claude Code</strong> — the CLI coding agent</li>
-      <li><strong>Codex</strong> — OpenAI's Windows app</li>
-      <li><strong>Gemini CLI</strong> — Google</li>
-      <li><strong>LM Studio</strong> — for running local models (Llama, Qwen, Mistral, whatever you've loaded up)</li>
-      <li><strong>Anything else that can call a STDIO MCP server</strong> — the protocol is the only requirement</li>
-    </ul>
-    <p>It doesn't care which model is on the other end. If your AI of choice can call MCP tools, you can talk to it.</p>
-  </article>
-
-  <footer>
-    <span>© 2026 AIWander · Apache-2.0 licensed</span>
-    <span>
-      <a href="https://github.com/AIWander/Voice-Command" target="_blank" rel="noopener">GitHub</a> ·
-      <a href="https://aiwander.ai" target="_blank" rel="noopener">AIWander.ai</a> ·
-      <a href="https://github.com/AIWander/Voice-Command/issues" target="_blank" rel="noopener">Report an issue</a>
-    </span>
   </footer>
-
-</div>
 </body>
 </html>
