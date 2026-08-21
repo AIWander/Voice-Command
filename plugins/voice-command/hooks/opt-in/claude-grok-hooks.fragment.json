@@ -1,0 +1,63 @@
+{
+  "description": "Optional single-owner policy hooks for Voice-Command",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"__VOICE_COMMAND_PLUGIN_ROOT__/hooks/opt-in/adapters/claude-grok/hook_adapter.py\" --event SessionStart",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"__VOICE_COMMAND_PLUGIN_ROOT__/hooks/opt-in/adapters/claude-grok/hook_adapter.py\" --event UserPromptSubmit",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "voice__|mcp__voice__|voice-command__|mcp__voice-command__|use_tool|CallMcpTool",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"__VOICE_COMMAND_PLUGIN_ROOT__/hooks/opt-in/adapters/claude-grok/hook_adapter.py\" --event PreToolUse",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "voice__|mcp__voice__|voice-command__|mcp__voice-command__|use_tool|CallMcpTool",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"__VOICE_COMMAND_PLUGIN_ROOT__/hooks/opt-in/adapters/claude-grok/hook_adapter.py\" --event PostToolUse",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "voice__|mcp__voice__|voice-command__|mcp__voice-command__|use_tool|CallMcpTool",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"__VOICE_COMMAND_PLUGIN_ROOT__/hooks/opt-in/adapters/claude-grok/hook_adapter.py\" --event PostToolUseFailure",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

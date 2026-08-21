@@ -1,0 +1,67 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"__VOICE_COMMAND_PLUGIN_ROOT__/hooks/opt-in/adapters/codex/hook_adapter.py\" --event SessionStart",
+            "timeout": 5,
+            "statusMessage": "Voice-Command session orientation"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"__VOICE_COMMAND_PLUGIN_ROOT__/hooks/opt-in/adapters/codex/hook_adapter.py\" --event UserPromptSubmit",
+            "timeout": 5,
+            "statusMessage": "Voice-Command turn state"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "mcp__voice__.*|voice__.*|mcp__voice-command__.*|voice-command__.*|use_tool|CallMcpTool",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"__VOICE_COMMAND_PLUGIN_ROOT__/hooks/opt-in/adapters/codex/hook_adapter.py\" --event PreToolUse",
+            "timeout": 5,
+            "statusMessage": "Voice-Command microphone policy"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__voice__.*|voice__.*|mcp__voice-command__.*|voice-command__.*|use_tool|CallMcpTool",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"__VOICE_COMMAND_PLUGIN_ROOT__/hooks/opt-in/adapters/codex/hook_adapter.py\" --event PostToolUse",
+            "timeout": 5,
+            "statusMessage": "Voice-Command redacted audit"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "mcp__voice__.*|voice__.*|mcp__voice-command__.*|voice-command__.*|use_tool|CallMcpTool",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"__VOICE_COMMAND_PLUGIN_ROOT__/hooks/opt-in/adapters/codex/hook_adapter.py\" --event PostToolUseFailure",
+            "timeout": 5,
+            "statusMessage": "Voice-Command failure audit"
+          }
+        ]
+      }
+    ]
+  }
+}

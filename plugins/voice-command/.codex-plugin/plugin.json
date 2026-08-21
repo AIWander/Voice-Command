@@ -18,7 +18,7 @@
     "longDescription": "Adds the Voice-Command MCP wrapper and concise operating guidance. Speech recognition is local; current edge-tts speech output sends response text to Microsoft's online service. Voice changes the input and output channel only and grants no new tool privileges.",
     "developerName": "AIWander",
     "category": "Productivity",
-    "capabilities": ["Speech input", "Speech output", "Playback control", "Context-preserving interruption"],
+    "capabilities": ["Speech input", "Speech output", "Playback control", "Context-preserving interruption", "Widget control guidance", "Optional opt-in policy hooks"],
     "websiteURL": "https://github.com/AIWander/Voice-Command",
     "defaultPrompt": [
       "Use Voice Command for a short spoken conversation.",

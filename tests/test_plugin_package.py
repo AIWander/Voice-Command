@@ -64,11 +64,12 @@ def test_installer_versions_and_interruption_payload_follow_the_components():
     assert "voice_interrupt.py" in installer_readme
 
 
-def test_two_concise_voice_skills_have_valid_names():
+def test_three_concise_voice_skills_have_valid_names():
     skill_paths = sorted(PLUGIN.glob("skills/*/SKILL.md"))
     assert [path.parent.name for path in skill_paths] == [
         "voice-command",
         "voice-command-setup",
+        "voice-widget",
     ]
     for path in skill_paths:
         text = path.read_text(encoding="utf-8")
@@ -76,6 +77,8 @@ def test_two_concise_voice_skills_have_valid_names():
         assert "\ndescription: " in text
         assert "[TODO:" not in text
         assert len(text.splitlines()) < 90
+        agents_manifest = path.parent / "agents" / "openai.yaml"
+        assert agents_manifest.is_file()
 
 
 def test_rust_contract_is_ten_voice_tools_and_loopback_only():

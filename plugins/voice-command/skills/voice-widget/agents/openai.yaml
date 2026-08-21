@@ -1,0 +1,7 @@
+interface:
+  display_name: "Voice Widget"
+  short_description: "Cooperate with the Voice-Command widget window"
+  default_prompt: "Use $voice-widget to explain the voice window's Pause, Interrupt, and Stop controls and react correctly when I use them."
+
+policy:
+  allow_implicit_invocation: true

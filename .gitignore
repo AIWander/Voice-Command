@@ -39,3 +39,6 @@ voice.config.toml
 
 # Local backups
 *.bak
+
+# Rendered hook JSON carries machine-local absolute paths
+plugins/voice-command/rendered-hooks/
