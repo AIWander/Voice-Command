@@ -43,7 +43,7 @@ UninstallDisplayIcon={app}\bin\voice-mcp.exe
 LicenseFile={#RepoRoot}\LICENSE
 
 [Messages]
-WelcomeLabel2=Installs the optional Voice-Command Rust MCP wrapper, plugin metadata, and two voice skills. It stages a local marketplace, copies per-AI activation instructions to the clipboard, and shows both a popup and terminal handoff. It does not edit AI configs, auto-trust a plugin, start the listener, or open the microphone.
+WelcomeLabel2=Installs the optional Voice-Command Rust MCP wrapper, plugin metadata, three voice skills, and inert opt-in hook templates that are never wired for you. It stages a local marketplace, copies per-AI activation instructions to the clipboard, and shows both a popup and terminal handoff. It does not edit AI configs, auto-trust a plugin, start the listener, or open the microphone.
 
 [Files]
 Source: "{#VoiceExe}"; DestDir: "{app}\bin"; DestName: "voice-mcp.exe"; Flags: ignoreversion

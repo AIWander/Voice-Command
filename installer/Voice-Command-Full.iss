@@ -46,7 +46,7 @@ UninstallDisplayIcon={app}\voice.exe
 LicenseFile={#RepoRoot}\LICENSE
 
 [Messages]
-WelcomeLabel2=Installs the complete bundled CPC Voice runtime for {#Arch}: private Python, a local speech-to-text model, Voice App, current Rust MCP wrapper, plugin metadata, and two voice skills. Speech output through edge-tts requires network access. The installer copies per-AI activation instructions to the clipboard and shows both a popup and terminal handoff. It does not edit AI configs, auto-trust a plugin, or open the microphone.
+WelcomeLabel2=Installs the complete bundled CPC Voice runtime for {#Arch}: private Python, a local speech-to-text model, Voice App, current Rust MCP wrapper, plugin metadata, three voice skills, and inert opt-in hook templates that are never wired for you. Speech output through edge-tts requires network access. The installer copies per-AI activation instructions to the clipboard and shows both a popup and terminal handoff. It does not edit AI configs, auto-trust a plugin, or open the microphone.
 
 [Tasks]
 Name: desktopicon; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"

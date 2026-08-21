@@ -77,6 +77,18 @@ The plugin does not auto-start the microphone. Start the Voice App or local
 Python listener yourself, then ask the AI to call start_voice_mode. That check
 does not open the microphone. Ask to talk before listen_for_speech is called.
 
+OPTIONAL HOOKS (INERT UNTIL YOU WIRE THEM)
+
+The plugin ships reviewed hook templates under plugins/voice-command/hooks/
+opt-in. Nothing loads them for you and no AI config was edited. To use them,
+read that folder's README, run plugins/voice-command/scripts/render-hooks.ps1
+to produce host-ready JSON with real paths, review the result, back up your
+host's live hook file, then merge only the entries you want. They keep speech
+capture on the loopback listener, remind the AI to listen after speaking, and
+write a metadata-only audit in which every string is replaced by its length,
+so spoken text is never stored. A hook is only enforcement once your host
+trusts that exact definition and a harmless probe proves it fired.
+
 UNINSTALL
 
 Disable or uninstall Voice-Command in each AI client first, then uninstall the
