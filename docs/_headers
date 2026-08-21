@@ -1,15 +1,45 @@
+# Cache policy is DEFAULT-SAFE, then explicitly widened.
+#
+# /* sets a revalidate-always default so any file added to docs/ later is correct
+# without anyone remembering a rule for it. Long caching is opt-in per path below.
+# A forgotten rule then costs one revalidation, not days of stale content.
+#
+# NO `immutable` HERE, DELIBERATELY. These filenames are not content-hashed -
+# index.html references plain site.css / site.js / favicon.svg. `immutable` tells
+# browsers never to revalidate, not even on reload or hard refresh, so with stable
+# names a CSS or JS fix could not reach anyone who had visited in the previous
+# seven days. Measured live on aivoicemcp.pages.dev 2026-08-21 before this change.
+# Only reintroduce `immutable` if the build starts emitting site.<hash>.css names.
+#
+# EVERY OVERRIDE DETACHES FIRST. Cloudflare Pages does not let a specific rule beat
+# a general one - per its docs duplicate headers are "joined with a comma separator",
+# so /site.css matching both blocks would emit two conflicting max-age values.
+# `! Cache-Control` drops the inherited value before the new one is set.
+#
+# NOTE: GitHub Pages IGNORES this file. voice.aiwander.ai is served by GitHub Pages
+# and returns max-age=600 regardless of anything here. These rules take effect only
+# on the Cloudflare Pages deployment (aivoicemcp).
+
 /*
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; media-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
   Permissions-Policy: camera=(), geolocation=(), microphone=()
   Referrer-Policy: strict-origin-when-cross-origin
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
+  Cache-Control: public, max-age=0, must-revalidate
 
 /site.css
-  Cache-Control: public, max-age=604800, immutable
+  ! Cache-Control
+  Cache-Control: public, max-age=3600, must-revalidate
 
 /site.js
-  Cache-Control: public, max-age=604800, immutable
+  ! Cache-Control
+  Cache-Control: public, max-age=3600, must-revalidate
 
 /favicon.svg
-  Cache-Control: public, max-age=604800, immutable
+  ! Cache-Control
+  Cache-Control: public, max-age=86400, must-revalidate
+
+/*.png
+  ! Cache-Control
+  Cache-Control: public, max-age=86400, must-revalidate
