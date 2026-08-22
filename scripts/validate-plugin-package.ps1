@@ -231,6 +231,54 @@ if ($hookScripts.Count -gt 0) {
     }
 }
 
+# ------------------------------------------------- retired capability vocabulary
+# Trigger text is routing, not prose: a description that still advertises a moved
+# capability sends the model to a server that cannot do the job. Checked ONLY in
+# advertising and trigger fields - body paragraphs must stay free to explain where
+# a capability went, which is the opposite of a defect.
+# A repo that declares none must get an EMPTY list, not @($null) - an empty
+# regex matches every string, which would fail every advertising field.
+$retired = @($config.retiredCapabilityTerms | Where-Object { $_ -is [string] -and $_.Trim() })
+if ($retired.Count -gt 0) {
+    function Test-Advertised([string] $text, [string] $where) {
+        if (-not $text) { return }
+        foreach ($term in $retired) {
+            if ($text -match [regex]::Escape($term)) {
+                Add-Problem "$where advertises retired capability '$term'; trigger text routes the model, so a stale term sends it to a server that cannot do the job."
+            }
+        }
+    }
+    foreach ($profile in $advertised) {
+        foreach ($manifestDir in @(".claude-plugin", ".codex-plugin")) {
+            $manifestPath = Join-Path $RepoRoot "plugins/$profile/$manifestDir/plugin.json"
+            if (-not (Test-Path -LiteralPath $manifestPath)) { continue }
+            $manifest = Read-Json $manifestPath
+            Test-Advertised $manifest.description "plugins/$profile/$manifestDir/plugin.json description"
+            if ($manifest.interface) {
+                Test-Advertised $manifest.interface.longDescription "plugins/$profile/$manifestDir/plugin.json longDescription"
+                Test-Advertised $manifest.interface.shortDescription "plugins/$profile/$manifestDir/plugin.json shortDescription"
+                foreach ($capability in @($manifest.interface.capabilities)) {
+                    Test-Advertised $capability "plugins/$profile/$manifestDir/plugin.json capabilities"
+                }
+            }
+        }
+        $skillsDir = Join-Path $RepoRoot "plugins/$profile/skills"
+        if (-not (Test-Path -LiteralPath $skillsDir)) { continue }
+        foreach ($skill in Get-ChildItem -LiteralPath $skillsDir -Directory) {
+            $skillFile = Join-Path $skill.FullName "SKILL.md"
+            if (Test-Path -LiteralPath $skillFile) {
+                # frontmatter only: everything between the opening and closing ---
+                $raw = Get-Content -LiteralPath $skillFile -Raw
+                $parts = $raw -split "(?m)^---\s*$", 3
+                if ($parts.Count -ge 2) { Test-Advertised $parts[1] "$profile/$($skill.Name)/SKILL.md frontmatter" }
+            }
+            $agentFile = Join-Path $skill.FullName "agents/openai.yaml"
+            if (Test-Path -LiteralPath $agentFile) {
+                Test-Advertised (Get-Content -LiteralPath $agentFile -Raw) "$profile/$($skill.Name)/agents/openai.yaml"
+            }
+        }
+    }
+}
 # --------------------------------------------------------------- emoji policy
 # Downstream tools that read and rewrite these files can emoji-bake; keep the
 # packaged surface plain.
