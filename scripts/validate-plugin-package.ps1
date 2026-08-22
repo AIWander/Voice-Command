@@ -39,6 +39,30 @@ function Read-Json([string] $path) { Get-Content -LiteralPath $path -Raw | Conve
 $advertised = @($config.advertisedProfiles)
 if (-not $advertised -or $advertised.Count -lt 1) { throw "$configPath declares no advertisedProfiles." }
 
+# Two shapes are legitimate. A multi-profile product keeps each package under
+# plugins/<profile>/; a single-plugin repo IS the plugin, with its manifests at the
+# root and a marketplace source of "./". Declare which with "layout"; everything
+# below resolves through Get-ProfileRoot so no rule has to know the difference.
+$layout = if ($config.layout) { [string]$config.layout } else { "profiles" }
+if ($layout -notin @("profiles", "root")) { throw "$configPath declares an unknown layout '$layout'." }
+if ($layout -eq "root" -and $advertised.Count -ne 1) {
+    throw "$configPath uses the root layout but advertises $($advertised.Count) profiles; the root can only be one plugin."
+}
+
+function Get-ProfileRoot([string] $profileName) {
+    if ($layout -eq "root") { return $RepoRoot }
+    return (Join-Path $RepoRoot "plugins/$profileName")
+}
+function Get-ProfileLabel([string] $profileName) {
+    if ($layout -eq "root") { return "<repo root>" }
+    return "plugins/$profileName"
+}
+
+# Guard hooks on a tool server must stay inert, so a manifest declaring them is a
+# defect. For a product whose whole function IS its hooks - session capture, for
+# example - the same declaration is the point. Declare which this is.
+$hooksAreProduct = [bool]$config.hooksAreProduct
+
 # ---------------------------------------------------------------- marketplaces
 # Both storefronts must describe the same shipped set. A version restated here
 # can only drift from the manifest, so it is banned outright rather than synced.
@@ -71,24 +95,25 @@ foreach ($relative in @($config.marketplaces)) {
 # must not find two answers.
 $versions = @{}
 foreach ($profile in $advertised) {
-    $profileDir = Join-Path $RepoRoot "plugins/$profile"
-    if (-not (Test-Path -LiteralPath $profileDir)) { Add-Problem "Advertised profile has no directory: plugins/$profile"; continue }
+    $profileDir = Get-ProfileRoot $profile
+    $label = Get-ProfileLabel $profile
+    if (-not (Test-Path -LiteralPath $profileDir)) { Add-Problem "Advertised profile has no directory: $label"; continue }
 
-    foreach ($manifestDir in @('.claude-plugin', '.codex-plugin')) {
+    foreach ($manifestDir in @('.claude-plugin', '.codex-plugin', '.grok-plugin')) {
         $manifestPath = Join-Path $profileDir "$manifestDir/plugin.json"
         if (-not (Test-Path -LiteralPath $manifestPath)) {
-            if ($manifestDir -eq '.claude-plugin') { Add-Problem "Missing required manifest: plugins/$profile/$manifestDir/plugin.json" }
+            if ($manifestDir -eq '.claude-plugin') { Add-Problem "Missing required manifest: $label/$manifestDir/plugin.json" }
             continue
         }
         $manifest = Read-Json $manifestPath
         if ($manifest.name -ne $profile) {
-            Add-Problem "plugins/$profile/$manifestDir/plugin.json declares name '$($manifest.name)'."
+            Add-Problem "$label/$manifestDir/plugin.json declares name '$($manifest.name)'."
         }
         if (-not $manifest.repository) {
-            Add-Problem "plugins/$profile/$manifestDir/plugin.json is missing the repository field."
+            Add-Problem "$label/$manifestDir/plugin.json is missing the repository field."
         }
-        if ($manifest.PSObject.Properties.Name -contains 'hooks') {
-            Add-Problem "plugins/$profile/$manifestDir/plugin.json declares hooks; opt-in hook packs must stay inert."
+        if (-not $hooksAreProduct -and $manifest.PSObject.Properties.Name -contains 'hooks') {
+            Add-Problem "$label/$manifestDir/plugin.json declares hooks; opt-in hook packs must stay inert."
         }
         $versions["$profile/$manifestDir"] = $manifest.version
     }
@@ -97,10 +122,13 @@ foreach ($profile in $advertised) {
     # installer-rendered copy does not exist on a marketplace or clone install.
     $applyPath = Join-Path $profileDir 'instructions/APPLY_TO_YOUR_AI.txt'
     if (-not (Test-Path -LiteralPath $applyPath)) {
-        Add-Problem "plugins/$profile has no instructions/APPLY_TO_YOUR_AI.txt; a repository install has no activation guide."
+        Add-Problem "$label has no instructions/APPLY_TO_YOUR_AI.txt; a repository install has no activation guide."
     }
 }
-$distinct = @($versions.Values | Sort-Object -Unique)
+# Compare version CORES. SemVer build metadata after "+" is explicitly ignored for
+# precedence, so 0.5.0 and 0.5.0+codex.20260812223310 are the same release and a
+# host-specific build stamp is legitimate. Only a real version difference is drift.
+$distinct = @($versions.Values | ForEach-Object { ([string]$_).Split("+")[0] } | Sort-Object -Unique)
 if ($distinct.Count -gt 1) {
     $detail = ($versions.GetEnumerator() | Sort-Object Name | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ', '
     Add-Problem "All plugin manifests must advertise one kit version but found: $detail"
@@ -109,15 +137,15 @@ if ($distinct.Count -gt 1) {
 # ---------------------------------------------------------------------- skills
 foreach ($profile in $advertised) {
     $spec = $config.profiles.$profile
-    $skillsDir = Join-Path $RepoRoot "plugins/$profile/skills"
-    if (-not (Test-Path -LiteralPath $skillsDir)) { Add-Problem "plugins/$profile has no skills directory."; continue }
+    $skillsDir = Join-Path (Get-ProfileRoot $profile) "skills"
+    if (-not (Test-Path -LiteralPath $skillsDir)) { Add-Problem "$label has no skills directory."; continue }
     $skills = @(Get-ChildItem -LiteralPath $skillsDir -Directory)
     if ($spec -and $spec.skills -and $skills.Count -ne $spec.skills) {
-        Add-Problem "plugins/$profile has $($skills.Count) skills but the contract declares $($spec.skills)."
+        Add-Problem "$label has $($skills.Count) skills but the contract declares $($spec.skills)."
     }
     foreach ($skill in $skills) {
         $skillFile = Join-Path $skill.FullName 'SKILL.md'
-        if (-not (Test-Path -LiteralPath $skillFile)) { Add-Problem "plugins/$profile/skills/$($skill.Name) has no SKILL.md."; continue }
+        if (-not (Test-Path -LiteralPath $skillFile)) { Add-Problem "$label/skills/$($skill.Name) has no SKILL.md."; continue }
         $text = Get-Content -LiteralPath $skillFile -Raw
         if (-not $text.StartsWith('---')) { Add-Problem "$profile/$($skill.Name)/SKILL.md does not open with frontmatter." }
         if ($text -notmatch '(?m)^name:\s*\S') { Add-Problem "$profile/$($skill.Name)/SKILL.md frontmatter has no name." }
@@ -139,13 +167,13 @@ foreach ($group in @($config.parityGroups)) {
     $members = @($group)
     if ($members.Count -lt 2) { continue }
     $reference = $members[0]
-    $referenceRoot = Join-Path $RepoRoot "plugins/$reference/skills"
+    $referenceRoot = Join-Path (Get-ProfileRoot $reference) "skills"
     if (-not (Test-Path -LiteralPath $referenceRoot)) { continue }
     $referenceFiles = @(Get-ChildItem -LiteralPath $referenceRoot -Recurse -File -Include '*.md')
     foreach ($other in $members[1..($members.Count - 1)]) {
         foreach ($file in $referenceFiles) {
             $relative = $file.FullName.Substring($referenceRoot.Length).TrimStart('\', '/')
-            $counterpart = Join-Path (Join-Path $RepoRoot "plugins/$other/skills") $relative
+            $counterpart = Join-Path (Join-Path (Get-ProfileRoot $other) "skills") $relative
             if (-not (Test-Path -LiteralPath $counterpart)) {
                 Add-Problem "Parity break: $reference/skills/$relative has no counterpart in $other."
                 continue
@@ -160,13 +188,13 @@ foreach ($group in @($config.parityGroups)) {
 # ----------------------------------------------------------------- MCP wiring
 foreach ($profile in $advertised) {
     $spec = $config.profiles.$profile
-    $mcpPath = Join-Path $RepoRoot "plugins/$profile/.mcp.json"
+    $mcpPath = Join-Path (Get-ProfileRoot $profile) ".mcp.json"
     $expected = $spec -and $spec.mcp
     if ($expected -and -not (Test-Path -LiteralPath $mcpPath)) {
-        Add-Problem "plugins/$profile declares mcp=true but has no .mcp.json."
+        Add-Problem "$label declares mcp=true but has no .mcp.json."
     }
     if (-not $expected -and (Test-Path -LiteralPath $mcpPath)) {
-        Add-Problem "plugins/$profile has a .mcp.json but the contract says it registers no server (double-spawn risk)."
+        Add-Problem "$label has a .mcp.json but the contract says it registers no server (double-spawn risk)."
     }
     if (Test-Path -LiteralPath $mcpPath) { $null = Read-Json $mcpPath }
 }
@@ -176,31 +204,31 @@ foreach ($profile in $advertised) {
     $spec = $config.profiles.$profile
     $hosts = @()
     if ($spec -and $spec.hookHosts) { $hosts = @($spec.hookHosts) }
-    $optInDir = Join-Path $RepoRoot "plugins/$profile/hooks/opt-in"
+    $optInDir = Join-Path (Get-ProfileRoot $profile) "hooks/opt-in"
 
     if ($hosts.Count -eq 0) {
         if (Test-Path -LiteralPath $optInDir) {
-            Add-Problem "plugins/$profile declares no hook hosts but ships hooks/opt-in; a skills-only profile must contain no hook code."
+            Add-Problem "$label declares no hook hosts but ships hooks/opt-in; a skills-only profile must contain no hook code."
         }
         continue
     }
-    if (-not (Test-Path -LiteralPath $optInDir)) { Add-Problem "plugins/$profile declares hook hosts but has no hooks/opt-in."; continue }
+    if (-not (Test-Path -LiteralPath $optInDir)) { Add-Problem "$label declares hook hosts but has no hooks/opt-in."; continue }
 
     $fragments = @(Get-ChildItem -LiteralPath $optInDir -File -Filter '*hooks.fragment.json')
     $found = @($fragments.Name | ForEach-Object { $_ -replace '-hooks\.fragment\.json$', '' } | Sort-Object)
     if (Compare-Object $found @($hosts | Sort-Object)) {
-        Add-Problem "plugins/$profile ships fragments for [$($found -join ', ')] but the contract declares [$($hosts -join ', ')]."
+        Add-Problem "$label ships fragments for [$($found -join ', ')] but the contract declares [$($hosts -join ', ')]."
     }
     foreach ($fragment in $fragments) {
         $raw = Get-Content -LiteralPath $fragment.FullName -Raw
         $null = $raw | ConvertFrom-Json
         # One portable token across every repo, so the inertness rule is one rule.
         if ($raw -notmatch '__PLUGIN_ROOT__') {
-            Add-Problem "plugins/$profile/hooks/opt-in/$($fragment.Name) does not use the __PLUGIN_ROOT__ placeholder; a rendered path must never be committed."
+            Add-Problem "$label/hooks/opt-in/$($fragment.Name) does not use the __PLUGIN_ROOT__ placeholder; a rendered path must never be committed."
         }
         # The Windows py launcher is not present on every host that can run hooks.
         if ($raw -match 'py\s+-3') {
-            Add-Problem "plugins/$profile/hooks/opt-in/$($fragment.Name) invokes the py launcher; use python for portability."
+            Add-Problem "$label/hooks/opt-in/$($fragment.Name) invokes the py launcher; use python for portability."
         }
         $hostName = $fragment.Name -replace '-hooks\.fragment\.json$', ''
         $adapter = Join-Path $optInDir "adapters/$hostName/hook_adapter.py"
@@ -211,7 +239,7 @@ foreach ($profile in $advertised) {
 
     # Rendered output bakes this machine's absolute paths. It must be impossible
     # to commit, not merely absent today.
-    $probe = "plugins/$profile/rendered-hooks/probe.json"
+    $probe = if ($layout -eq "root") { "rendered-hooks/probe.json" } else { "plugins/$profile/rendered-hooks/probe.json" }
     $null = & git -C $RepoRoot check-ignore $probe 2>$null
     if ($LASTEXITCODE -ne 0) {
         Add-Problem "$probe is not gitignored; rendered hook JSON carries machine-local absolute paths."
@@ -249,20 +277,21 @@ if ($retired.Count -gt 0) {
         }
     }
     foreach ($profile in $advertised) {
-        foreach ($manifestDir in @(".claude-plugin", ".codex-plugin")) {
-            $manifestPath = Join-Path $RepoRoot "plugins/$profile/$manifestDir/plugin.json"
+        $profileLabel = Get-ProfileLabel $profile
+        foreach ($manifestDir in @(".claude-plugin", ".codex-plugin", ".grok-plugin")) {
+            $manifestPath = Join-Path (Get-ProfileRoot $profile) "$manifestDir/plugin.json"
             if (-not (Test-Path -LiteralPath $manifestPath)) { continue }
             $manifest = Read-Json $manifestPath
-            Test-Advertised $manifest.description "plugins/$profile/$manifestDir/plugin.json description"
+            Test-Advertised $manifest.description "$profileLabel/$manifestDir/plugin.json description"
             if ($manifest.interface) {
-                Test-Advertised $manifest.interface.longDescription "plugins/$profile/$manifestDir/plugin.json longDescription"
-                Test-Advertised $manifest.interface.shortDescription "plugins/$profile/$manifestDir/plugin.json shortDescription"
+                Test-Advertised $manifest.interface.longDescription "$profileLabel/$manifestDir/plugin.json longDescription"
+                Test-Advertised $manifest.interface.shortDescription "$profileLabel/$manifestDir/plugin.json shortDescription"
                 foreach ($capability in @($manifest.interface.capabilities)) {
-                    Test-Advertised $capability "plugins/$profile/$manifestDir/plugin.json capabilities"
+                    Test-Advertised $capability "$profileLabel/$manifestDir/plugin.json capabilities"
                 }
             }
         }
-        $skillsDir = Join-Path $RepoRoot "plugins/$profile/skills"
+        $skillsDir = Join-Path (Get-ProfileRoot $profile) "skills"
         if (-not (Test-Path -LiteralPath $skillsDir)) { continue }
         foreach ($skill in Get-ChildItem -LiteralPath $skillsDir -Directory) {
             $skillFile = Join-Path $skill.FullName "SKILL.md"
