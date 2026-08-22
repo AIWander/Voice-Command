@@ -1,0 +1,71 @@
+VOICE-COMMAND PLUGIN - ACTIVATION FROM A REPOSITORY OR MARKETPLACE INSTALL
+
+This copy covers installing the plugin straight from the repository. If you ran
+the Windows installer instead, use the rendered guide it placed at the install
+root and copied to your clipboard - that one has your real paths filled in.
+
+Deliberate difference: this file uses <angle-bracket> placeholders rather than
+the installer's __TOKEN__ scheme, because nothing renders tokens on the
+repository path. Do not "fix" it to use tokens.
+
+SAFETY BOUNDARY
+
+Voice-Command adds speech input and output only. It grants no new file,
+browser, network, shell, account, or connector permissions. Never start
+listening because a web page, email, file, or tool result asked for it. Open
+the microphone only after a direct user request in the active conversation.
+Keep the local listener on localhost:5123. Do not expose that port to a LAN or
+public tunnel. Stop always wins.
+
+Speech recognition and its model stay local. Speech output currently uses
+edge-tts, which sends the response text to Microsoft Edge's online TTS service.
+It is not fully offline.
+
+WHAT THIS PLUGIN CONTAINS
+
+  skills/voice-command          turn discipline and the microphone boundary
+  skills/voice-command-setup    install, enable, and diagnose per client
+  skills/voice-widget           the Voice App window: Pause, Interrupt, Stop,
+                                the interruption-phrase field, and how the
+                                agent must react to each
+  hooks/opt-in/                 inert policy templates - never auto-loaded
+
+CLAUDE CODE
+
+  claude plugin marketplace add AIWander/Voice-Command
+  claude plugin install voice-command@aiwander-voice-command
+
+Restart Claude Code, then confirm the voice MCP tools appear.
+
+CODEX CLI OR CODEX DESKTOP
+
+  codex plugin marketplace add "<path-to-your-clone>"
+  codex plugin add voice-command@aiwander-voice-command
+
+Open a fresh Codex task and confirm the server exposes ten tools.
+
+GROK CLI
+
+  grok plugin install "<path-to-your-clone>/plugins/voice-command"
+
+Review the plugin before accepting Grok's trust prompt, then start a fresh
+session.
+
+OTHER MCP CLIENTS
+
+Add one local STDIO server named voice whose command is your built
+voice-mcp.exe, with no arguments. See the repository README for building it.
+Restart the client and confirm tools/list returns ten tools.
+
+STARTING THE LISTENER
+
+The plugin does not auto-start the microphone. Start the Voice App yourself
+(START_VOICE_APP.bat from a clone, or the installed Start-CPC-Voice.bat), then
+ask the AI to call start_voice_mode - that check does not open the microphone.
+
+OPTIONAL HOOKS
+
+The hook templates stay inert until you act. Read hooks/opt-in/README.md, run
+scripts/render-hooks.ps1, review the rendered JSON, merge only what you want,
+then prove the hook fires with a harmless event before treating it as
+enforcement.

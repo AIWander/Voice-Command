@@ -19,8 +19,9 @@ Contents:
 
 The widget itself (the Voice App window) ships with the full installer or runs from a repo
 checkout via `START_VOICE_APP.bat`; the plugin teaches the agent to launch-check and cooperate
-with it but never starts the microphone. Per-client activation commands live in the
-installer-generated `APPLY_TO_YOUR_AI.txt` and the repository README.
+with it but never starts the microphone. Per-client activation commands live in
+`instructions/APPLY_TO_YOUR_AI.txt` beside this file (repository and marketplace installs)
+or in the rendered copy the Windows installer writes to the install root.
 
 Hook wiring is an explicit, reviewed user step. Install the plugin as-is for skills plus MCP
 registration with no hook code active.
