@@ -3,7 +3,7 @@
 These fragments are inert templates. The plugin, marketplace, and installer do not merge them
 into any host configuration. Enabling them is an explicit, reviewed user step.
 
-Use only one policy owner for Voice-Command. Replace `__VOICE_COMMAND_PLUGIN_ROOT__` with the
+Use only one policy owner for Voice-Command. Replace `__PLUGIN_ROOT__` with the
 absolute plugin path (or run `scripts/render-hooks.ps1`), review the rendered JSON, archive the
 host's live hook file, then apply it through that host's supported mechanism.
 

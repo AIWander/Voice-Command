@@ -23,7 +23,7 @@ def test_fragments_are_valid_json_with_placeholder_and_adapters_share_one_policy
     for name in ("claude-grok-hooks.fragment.json", "codex-hooks.fragment.json"):
         text = (PLUGIN / "hooks" / "opt-in" / name).read_text(encoding="utf-8")
         parsed = json.loads(text)
-        assert "__VOICE_COMMAND_PLUGIN_ROOT__" in text
+        assert "__PLUGIN_ROOT__" in text
         assert set(parsed["hooks"]) == {
             "SessionStart",
             "UserPromptSubmit",

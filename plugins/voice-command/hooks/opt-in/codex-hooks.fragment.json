@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"__VOICE_COMMAND_PLUGIN_ROOT__/hooks/opt-in/adapters/codex/hook_adapter.py\" --event SessionStart",
+            "command": "python \"__PLUGIN_ROOT__/hooks/opt-in/adapters/codex/hook_adapter.py\" --event SessionStart",
             "timeout": 5,
             "statusMessage": "Voice-Command session orientation"
           }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"__VOICE_COMMAND_PLUGIN_ROOT__/hooks/opt-in/adapters/codex/hook_adapter.py\" --event UserPromptSubmit",
+            "command": "python \"__PLUGIN_ROOT__/hooks/opt-in/adapters/codex/hook_adapter.py\" --event UserPromptSubmit",
             "timeout": 5,
             "statusMessage": "Voice-Command turn state"
           }
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"__VOICE_COMMAND_PLUGIN_ROOT__/hooks/opt-in/adapters/codex/hook_adapter.py\" --event PreToolUse",
+            "command": "python \"__PLUGIN_ROOT__/hooks/opt-in/adapters/codex/hook_adapter.py\" --event PreToolUse",
             "timeout": 5,
             "statusMessage": "Voice-Command microphone policy"
           }
@@ -43,7 +43,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"__VOICE_COMMAND_PLUGIN_ROOT__/hooks/opt-in/adapters/codex/hook_adapter.py\" --event PostToolUse",
+            "command": "python \"__PLUGIN_ROOT__/hooks/opt-in/adapters/codex/hook_adapter.py\" --event PostToolUse",
             "timeout": 5,
             "statusMessage": "Voice-Command redacted audit"
           }
@@ -56,7 +56,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"__VOICE_COMMAND_PLUGIN_ROOT__/hooks/opt-in/adapters/codex/hook_adapter.py\" --event PostToolUseFailure",
+            "command": "python \"__PLUGIN_ROOT__/hooks/opt-in/adapters/codex/hook_adapter.py\" --event PostToolUseFailure",
             "timeout": 5,
             "statusMessage": "Voice-Command failure audit"
           }

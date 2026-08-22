@@ -6,6 +6,18 @@ on:
   pull_request:
 
 jobs:
+  plugin-package:
+    name: Plugin package contract
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Validate shared plugin-package contract
+        shell: pwsh
+        run: ./scripts/validate-plugin-package.ps1
+
   lint:
     runs-on: ubuntu-latest
     steps:

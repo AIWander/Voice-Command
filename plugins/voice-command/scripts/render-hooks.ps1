@@ -29,7 +29,7 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
 Get-ChildItem -LiteralPath $sourceDir -Filter '*.fragment.json' -File | ForEach-Object {
     $content = Get-Content -Raw -LiteralPath $_.FullName
-    $rendered = $content.Replace('__VOICE_COMMAND_PLUGIN_ROOT__', $portableRoot)
+    $rendered = $content.Replace('__PLUGIN_ROOT__', $portableRoot)
     $null = $rendered | ConvertFrom-Json
     $name = $_.Name.Replace('.fragment', '')
     $destination = Join-Path $resolvedOutput $name

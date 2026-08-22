@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"__VOICE_COMMAND_PLUGIN_ROOT__/hooks/opt-in/adapters/claude-grok/hook_adapter.py\" --event SessionStart",
+            "command": "python \"__PLUGIN_ROOT__/hooks/opt-in/adapters/claude-grok/hook_adapter.py\" --event SessionStart",
             "timeout": 5
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"__VOICE_COMMAND_PLUGIN_ROOT__/hooks/opt-in/adapters/claude-grok/hook_adapter.py\" --event UserPromptSubmit",
+            "command": "python \"__PLUGIN_ROOT__/hooks/opt-in/adapters/claude-grok/hook_adapter.py\" --event UserPromptSubmit",
             "timeout": 5
           }
         ]
@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"__VOICE_COMMAND_PLUGIN_ROOT__/hooks/opt-in/adapters/claude-grok/hook_adapter.py\" --event PreToolUse",
+            "command": "python \"__PLUGIN_ROOT__/hooks/opt-in/adapters/claude-grok/hook_adapter.py\" --event PreToolUse",
             "timeout": 5
           }
         ]
@@ -41,7 +41,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"__VOICE_COMMAND_PLUGIN_ROOT__/hooks/opt-in/adapters/claude-grok/hook_adapter.py\" --event PostToolUse",
+            "command": "python \"__PLUGIN_ROOT__/hooks/opt-in/adapters/claude-grok/hook_adapter.py\" --event PostToolUse",
             "timeout": 5
           }
         ]
@@ -53,7 +53,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"__VOICE_COMMAND_PLUGIN_ROOT__/hooks/opt-in/adapters/claude-grok/hook_adapter.py\" --event PostToolUseFailure",
+            "command": "python \"__PLUGIN_ROOT__/hooks/opt-in/adapters/claude-grok/hook_adapter.py\" --event PostToolUseFailure",
             "timeout": 5
           }
         ]

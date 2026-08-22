@@ -1,0 +1,10 @@
+{
+  "marketplaceName": "aiwander-voice-command",
+  "marketplaces": [".claude-plugin/marketplace.json", ".agents/plugins/marketplace.json"],
+  "advertisedProfiles": ["voice-command"],
+  "profiles": {
+    "voice-command": { "skills": 3, "mcp": true, "hookHosts": ["claude-grok", "codex"] }
+  },
+  "parityGroups": [],
+  "notes": "Single profile: the opt-in hook pack ships inside it rather than as a separate hookless variant."
+}
