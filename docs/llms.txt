@@ -1,0 +1,25 @@
+# AI Voice MCP
+
+> Natural voice control for MCP agents on Windows. Speak to your AI, hear it answer, and interrupt it mid-sentence without losing the thread.
+
+- Publisher: AIWander
+- Platform: Windows
+- Current release: v3.0.0, released 2026-06-30
+- Pricing: not published
+
+## Download
+- [Releases](https://github.com/AIWander/Voice-Command/releases) - v3.0.0 ships per-architecture installers and portable `voice-mcp` binaries.
+- [Install guide](https://github.com/AIWander/Voice-Command#the-easy-way-to-install-ask-your-ai-to-do-it)
+
+## Source
+- [GitHub](https://github.com/AIWander/Voice-Command)
+- [Voice system reference](https://aivoicemcp.com/VOICE_SYSTEM.md)
+
+## Privacy, stated precisely
+- Speech recognition and its model run locally. The listener binds to `localhost:5123`.
+- Text-to-speech uses Edge TTS by default and therefore reaches Microsoft's online TTS service. You can replace it with a local backend.
+- Voice adds no new tool privileges of its own.
+
+## Notes
+- Bring your own AI: works with any stdio MCP client. No model key is requested.
+- Context-preserving interruption: you can cut the assistant off mid-sentence and it keeps the thread.
