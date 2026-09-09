@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-09-09
+
+Windows release. macOS users stay on v3.0.0: this build ships no Darwin
+`voice-mcp` binaries, because they cannot be produced on the Windows host that
+cut it. The macOS bootstrap support added below is source-level and unchanged.
+
+### Fixed
+
+- **Installer rejected over-long destinations only by failing.** A destination path
+  near the Windows limit made ONNX payload creation fail partway through, so Setup
+  exited 5 and rolled the whole install back after minutes of copying. Both
+  installers now measure the payload at build time and refuse an unsafe destination
+  up front, in the wizard and under `/SILENT` and `/DIR=` alike, naming the limit
+  and suggesting a shorter folder.
+
 ### Added
 
 - **Interruption listener** — a second, no-beep listening plane monitors user-selected phrases
@@ -24,6 +39,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Listen handoff gated on playback end** — `listen_for_speech` now waits for queued/paused playback to finish before the ready-beep, so pausing the voice stalls the switch back to listening; the AI can finish responding while you're still hearing it.
 - `speak` is **non-blocking** when the Voice App is running (queues audio and returns; `wait=true` restores blocking), with automatic fallback to the old direct playback when only the legacy listening server is up.
 - New `playback_control` MCP tool: `pause | resume | toggle | skip | stop | status`.
+  Provided by the Rust `voice-mcp` wrapper, which is what the installer ships as
+  `voice.exe`. The repo's legacy `server.py` is a three-tool development fallback
+  (`speak`, `listen_for_speech`, `start_voice_mode`), is not part of the installed
+  payload, and does not expose it.
 - `voice.config.example.toml`: new `[playback]` section (backend, media-key hook, always-on-top) and `[listen] beam_size` (Whisper beam width, default 5).
 - `requirements.txt`: `winsdk` on Windows for the native media session.
 - CI compile check now covers `voice_app.py`.
