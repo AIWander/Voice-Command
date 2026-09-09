@@ -45,6 +45,22 @@ set "TARGET_DIR=%TEMP%\voice-command-full-build-%ARCH%"
 set "VOICE_EXE=%TARGET_DIR%\%RUST_TARGET%\release\voice-mcp.exe"
 set "ISCC=C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 
+rem Measure the deepest path inside the runtime payload, relative to {app}, and
+rem hand it to the installer as PayloadMaxRelLen. The .iss uses it to reject an
+rem over-long destination BEFORE copying anything: Windows caps a usable path at
+rem 259 chars, and a 254-char destination previously made ONNX payload creation
+rem fail, Setup exit 5, and the whole install roll back. Measuring here rather
+rem than hardcoding means the guard tracks the payload if it ever grows deeper.
+for /f "usebackq delims=" %%L in (`powershell -NoProfile -Command ^
+  "$r='%RUNTIME_ROOT%'; $f=Get-ChildItem -LiteralPath $r -Recurse -File -Force -ErrorAction SilentlyContinue; if(-not $f){exit 1}; ($f | ForEach-Object { $_.FullName.Substring($r.Length+1).Length } | Measure-Object -Maximum).Maximum"`) do set "PAYLOAD_MAX_REL=%%L"
+if not defined PAYLOAD_MAX_REL (
+  echo Could not measure the payload depth under "%RUNTIME_ROOT%".
+  echo Refusing to build with an unverified destination-length guard.
+  exit /b 6
+)
+echo Deepest payload path relative to the install folder: %PAYLOAD_MAX_REL% characters.
+echo Installer will reject destinations longer than 259-1-%PAYLOAD_MAX_REL% characters.
+
 if not exist "%ISCC%" (
   echo Inno Setup 6 was not found at "%ISCC%".
   exit /b 5
@@ -53,7 +69,7 @@ if not exist "%ISCC%" (
 cargo build --locked --release --manifest-path "%ROOT%\voice-mcp\Cargo.toml" --target "%RUST_TARGET%" --target-dir "%TARGET_DIR%"
 if errorlevel 1 exit /b %errorlevel%
 
-"%ISCC%" /DArch=%ARCH% /DVoiceExe="%VOICE_EXE%" /DRuntimeRoot="%RUNTIME_ROOT%" /DAppVersion=%APP_VERSION% "%ROOT%\installer\Voice-Command-Full.iss"
+"%ISCC%" /DArch=%ARCH% /DVoiceExe="%VOICE_EXE%" /DRuntimeRoot="%RUNTIME_ROOT%" /DAppVersion=%APP_VERSION% /DPayloadMaxRelLen=%PAYLOAD_MAX_REL% "%ROOT%\installer\Voice-Command-Full.iss"
 if errorlevel 1 exit /b %errorlevel%
 
 for %%I in ("%ROOT%\dist\CPC-Voice-Setup-%ARCH%.exe") do (

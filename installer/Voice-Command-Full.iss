@@ -15,6 +15,17 @@
 #ifndef AppVersion
   #define AppVersion "3.1.0"
 #endif
+#ifndef PayloadMaxRelLen
+  ; Longest path INSIDE the payload, relative to {app}, in characters.
+  ; Measured 2026-09-09 = 159, in the bundled ONNX test-data tree:
+  ;   python\Lib\site-packages\onnx\backend\test\data\node\
+  ;   test_attention_4d_with_past_and_present_qk_matmul_bias_3d_mask_causal_expanded\
+  ;   test_data_set_0\output_0.pb
+  ; The ONNX tree dominates; the deepest plugin path is only 108.
+  ; build-full-installer.cmd re-measures the real runtime root and passes
+  ; /DPayloadMaxRelLen, so this default cannot silently rot when the payload grows.
+  #define PayloadMaxRelLen 159
+#endif
 #define RepoRoot SourcePath + ".."
 #define PluginRoot RepoRoot + "\plugins\voice-command"
 #if Arch == "arm64"
@@ -91,3 +102,74 @@ Type: filesandordirs; Name: "{app}\installer"
 Type: files; Name: "{app}\APPLY_TO_YOUR_AI.txt"
 Type: files; Name: "{app}\install-result.json"
 Type: files; Name: "{app}\clipboard-status.txt"
+
+[Code]
+// ---------------------------------------------------------------------------
+// Destination-length guard (release blocker, fixed 2026-09-09).
+//
+// Windows caps a usable path at 259 characters. This installer copies a bundled
+// CPython tree whose deepest entry sits PayloadMaxRelLen characters below the
+// application directory, so any destination longer than
+// (259 - 1 - PayloadMaxRelLen) makes file creation fail partway through.
+//
+// The observed failure was NOT a clean error: at a 254-character destination the
+// ONNX payload could not be created, Setup exited 5, and the whole install
+// rolled back after minutes of copying. This rejects BEFORE any file is written.
+//
+// Two entry points on purpose:
+//   NextButtonClick  - interactive runs, so the user is told at the folder page
+//                      while the folder is still easy to change.
+//   PrepareToInstall - the real gate. Also covers /SILENT, /VERYSILENT and
+//                      /DIR=, where no wizard page is shown; a non-empty result
+//                      aborts before the first file copy.
+//
+// NOTE for future editors: do NOT use Pascal brace comments in this section.
+// A brace comment containing a constant such as the app-dir constant is closed
+// early by that constant's own closing brace, and the remainder parses as code.
+// That mistake produced "Column 29: 'BEGIN' expected" on first compile here.
+// ---------------------------------------------------------------------------
+
+function MaxAppDirLen: Integer;
+begin
+  // 259 usable characters, minus the separator before the relative path.
+  Result := 259 - 1 - {#PayloadMaxRelLen};
+end;
+
+function TooLongMessage(const Dir: String): String;
+begin
+  Result :=
+    'The installation folder is too long for Windows.' #13#10 #13#10 +
+    'Chosen folder (' + IntToStr(Length(Dir)) + ' characters):' #13#10 +
+    Dir + #13#10 #13#10 +
+    'Maximum for this installer: ' + IntToStr(MaxAppDirLen) + ' characters.' #13#10 #13#10 +
+    'CPC Voice bundles a private Python runtime whose deepest file sits ' +
+    '{#PayloadMaxRelLen} characters below the installation folder, and Windows ' +
+    'cannot create paths longer than 259 characters. Installing here would fail ' +
+    'partway through and roll back.' #13#10 #13#10 +
+    'Please choose a shorter folder, for example:' #13#10 +
+    ExpandConstant('{userpf}') + '\CPC\VoiceApp';
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+begin
+  Result := True;
+  if CurPageID = wpSelectDir then
+  begin
+    if Length(WizardDirValue) > MaxAppDirLen then
+    begin
+      MsgBox(TooLongMessage(WizardDirValue), mbError, MB_OK);
+      Result := False;
+    end;
+  end;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  Dir: String;
+begin
+  Result := '';
+  NeedsRestart := False;
+  Dir := ExpandConstant('{app}');
+  if Length(Dir) > MaxAppDirLen then
+    Result := TooLongMessage(Dir);
+end;
