@@ -60,7 +60,7 @@ jobs:
           else echo "ok=false" >> "$GITHUB_OUTPUT"; echo "Azure signing secrets not configured - skipping Authenticode (cosign still signs)."; fi
       - name: Authenticode sign (Azure Trusted Signing)
         if: contains(matrix.target, 'windows') && steps.cansign.outputs.ok == 'true'
-        uses: azure/trusted-signing-action@v5
+        uses: Azure/artifact-signing-action@v2
         with:
           azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
