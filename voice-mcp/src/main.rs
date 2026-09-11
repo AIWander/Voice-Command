@@ -155,6 +155,33 @@ fn tool_definitions() -> Value {
     })
 }
 
+/// Resolve where session checkpoints are written without baking one machine's layout
+/// into the binary. Order: explicit override, per-user app data, home, working directory.
+fn default_session_dir() -> PathBuf {
+    if let Ok(path) = std::env::var("VOICE_SESSION_DIR") {
+        let trimmed = path.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed);
+        }
+    }
+
+    if let Some(base) = std::env::var_os("LOCALAPPDATA") {
+        return PathBuf::from(base)
+            .join("Voice-Command")
+            .join("voice_sessions");
+    }
+
+    if let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")) {
+        return PathBuf::from(home)
+            .join(".voice-command")
+            .join("voice_sessions");
+    }
+
+    std::env::current_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("voice_sessions")
+}
+
 fn rolling_log_path() -> Option<PathBuf> {
     if let Ok(path) = std::env::var("VOICE_TRANSCRIPT_LOG_PATH") {
         let trimmed = path.trim();
@@ -222,7 +249,7 @@ fn get_session_id() -> String {
 ///   1. VOICE_CONFIG_PATH env var (explicit override)
 ///   2. voice.config.toml next to the executable
 ///   3. ~/.config/voice/voice.config.toml
-///   4. legacy C:\CPC\voice\voice.config.toml (back-compat for existing installs)
+///   4. legacy system-drive CPC/voice/voice.config.toml (back-compat for existing installs)
 fn find_config_path() -> Option<String> {
     if let Ok(p) = std::env::var("VOICE_CONFIG_PATH") {
         if !p.is_empty() && std::path::Path::new(&p).exists() {
@@ -246,9 +273,13 @@ fn find_config_path() -> Option<String> {
             return Some(p.to_string_lossy().into_owned());
         }
     }
-    let legacy = "C:\\CPC\\voice\\voice.config.toml";
-    if std::path::Path::new(legacy).exists() {
-        return Some(legacy.to_string());
+    let system_drive = std::env::var_os("SystemDrive").unwrap_or_else(|| "C:".into());
+    let legacy = PathBuf::from(system_drive)
+        .join("CPC")
+        .join("voice")
+        .join("voice.config.toml");
+    if legacy.exists() {
+        return Some(legacy.to_string_lossy().into_owned());
     }
     None
 }
@@ -728,10 +759,12 @@ fn checkpoint(path: Option<&str>, note: Option<&str>) -> Result<Value, String> {
     let checkpoint_path = match path {
         Some(p) => p.to_string(),
         None => {
-            // Auto-generate path in voice_sessions
-            let dir = "C:\\My Drive\\Volumes\\voice_sessions";
-            let _ = std::fs::create_dir_all(dir);
-            format!("{}/session_{}.md", dir, session_id)
+            // Auto-generate a portable, per-user path in voice_sessions.
+            let dir = default_session_dir();
+            let _ = std::fs::create_dir_all(&dir);
+            dir.join(format!("session_{}.md", session_id))
+                .to_string_lossy()
+                .into_owned()
         }
     };
 
