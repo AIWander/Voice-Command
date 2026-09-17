@@ -1247,6 +1247,32 @@ def capture_voice(max_duration, skip_emotion=False, skip_filter=False,
 MANAGER = None  # set in main()
 INTERRUPTION_LISTENER = None  # set in main()
 
+# Binding to localhost does not keep web pages out. Any site the user visits can
+# send a "simple" cross-site POST here without a CORS preflight -- enough to
+# open the microphone, speak arbitrary text, or persist new trigger phrases --
+# and a DNS-rebinding page (evil.example resolving to 127.0.0.1) is treated as
+# same-origin, so it can also READ replies, /listen transcripts included.
+# Real clients (voice-mcp, curl, hooks) address localhost and send no Origin,
+# so they pass both checks below; browsers cannot forge Host, Origin or
+# Sec-Fetch-Site.
+_ALLOWED_HOSTS = frozenset(
+    f"{name}:{PORT}" for name in ("localhost", "127.0.0.1", "[::1]")
+)
+_ALLOWED_ORIGINS = frozenset(f"http://{host}" for host in _ALLOWED_HOSTS)
+
+
+def _request_refusal(headers):
+    """Return why a request must be refused, or None when it may proceed."""
+    host = (headers.get('Host') or '').strip().lower()
+    if host not in _ALLOWED_HOSTS:
+        return 'host not allowed'
+    origin = headers.get('Origin')
+    if origin is not None and origin.strip().lower() not in _ALLOWED_ORIGINS:
+        return 'cross-origin request refused'
+    if (headers.get('Sec-Fetch-Site') or '').strip().lower() == 'cross-site':
+        return 'cross-site request refused'
+    return None
+
 
 class VoiceHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
@@ -1269,7 +1295,18 @@ class VoiceHandler(BaseHTTPRequestHandler):
         except Exception:
             return {}
 
+    def refuse_untrusted(self):
+        """Send 403 and return True when the request did not come from a local client."""
+        reason = _request_refusal(self.headers)
+        if reason is None:
+            return False
+        log(f"HTTP refused {self.command} {urlparse(self.path).path}: {reason}")
+        self.send_json({'success': False, 'error': reason}, code=403)
+        return True
+
     def do_GET(self):
+        if self.refuse_untrusted():
+            return
         parsed = urlparse(self.path)
         if parsed.path == '/status':
             self.send_json({
@@ -1298,6 +1335,8 @@ class VoiceHandler(BaseHTTPRequestHandler):
             self.send_json({'success': False, 'error': 'Unknown endpoint'})
 
     def do_POST(self):
+        if self.refuse_untrusted():
+            return
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
         path = parsed.path
