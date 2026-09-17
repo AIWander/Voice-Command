@@ -70,7 +70,9 @@ Source: "{#RuntimeRoot}\app\voice_interrupt.py"; DestDir: "{app}\app"; Flags: ig
 Source: "{#RuntimeRoot}\app\voice.config.toml"; DestDir: "{app}\app"; Flags: ignoreversion
 Source: "{#RuntimeRoot}\Start-CPC-Voice.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#VoiceExe}"; DestDir: "{app}"; DestName: "voice.exe"; Flags: ignoreversion
-Source: "{#PluginRoot}\*"; DestDir: "{app}\marketplace\plugins\voice-command"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Local test runs leave __pycache__ beside the opt-in hooks. Those .pyc files embed
+; the build machine's source path, so they must never be packed.
+Source: "{#PluginRoot}\*"; DestDir: "{app}\marketplace\plugins\voice-command"; Excludes: "__pycache__,*.pyc"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#RepoRoot}\.agents\plugins\marketplace.json"; DestDir: "{app}\marketplace\.agents\plugins"; Flags: ignoreversion
 Source: "{#RepoRoot}\.claude-plugin\marketplace.json"; DestDir: "{app}\marketplace\.claude-plugin"; Flags: ignoreversion
 Source: "{#RepoRoot}\installer\APPLY_TO_YOUR_AI.txt"; DestDir: "{app}\installer"; DestName: "APPLY_TO_YOUR_AI.template.txt"; Flags: ignoreversion
