@@ -92,6 +92,22 @@ if not exist "%ISCC%" (
   exit /b 5
 )
 
+rem Keep the build machine out of the shipped binary. Without this, voice-mcp.exe
+rem carried 900+ copies of the builder's profile path: Rust panic locations point
+rem at %USERPROFILE%\.rustup and %USERPROFILE%\.cargo\registry, and the bundled
+rem aws-lc C code embeds __FILE__ for every source file. Both need their own flag:
+rem  - Rust: --remap-path-prefix (appended, so a caller's RUSTFLAGS survive).
+rem  - C:    aws-lc-sys compiles with clang-cl on arm64 and cl.exe on x64, and each
+rem          compiler only understands its own spelling. /d1trimfile is silently
+rem          ignored by clang-cl, which is how the first attempt still leaked 84 paths.
+rem Verified 2026-09-16: 0 hits for the profile path, repo path or host name in
+rem either architecture's binary, and both still answer MCP initialize + tools/list.
+set "RUSTFLAGS=%RUSTFLAGS% --remap-path-prefix=%USERPROFILE%=/build --remap-path-prefix=%ROOT%=/voice-command"
+if defined CARGO_HOME set "RUSTFLAGS=%RUSTFLAGS% --remap-path-prefix=%CARGO_HOME%=/cargo"
+if defined RUSTUP_HOME set "RUSTFLAGS=%RUSTFLAGS% --remap-path-prefix=%RUSTUP_HOME%=/rustup"
+set "CFLAGS_aarch64_pc_windows_msvc=%CFLAGS_aarch64_pc_windows_msvc% /clang:-ffile-prefix-map=%USERPROFILE%=/build"
+set "CFLAGS_x86_64_pc_windows_msvc=%CFLAGS_x86_64_pc_windows_msvc% /d1trimfile:%USERPROFILE%\"
+
 cargo build --locked --release --manifest-path "%ROOT%\voice-mcp\Cargo.toml" --target "%RUST_TARGET%" --target-dir "%TARGET_DIR%"
 if errorlevel 1 exit /b %errorlevel%
 
