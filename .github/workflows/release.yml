@@ -9,7 +9,32 @@ permissions:
   contents: write
 
 jobs:
+  # A release can be cut locally first: installers Authenticode-signed on the
+  # owner's machine and published with `gh release create`, which also creates
+  # the tag and so starts this workflow. Without this guard the jobs below would
+  # upload unsigned voice-mcp builds, Darwin binaries and a second SHA256SUMS
+  # into that published release, and `draft: true` would turn it back into a
+  # draft. A tag with no release, or with only a draft, still builds as before.
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          draft=$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null || true)
+          if [ "$draft" = "false" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Release $GITHUB_REF_NAME is already published - leaving it untouched."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: guard
+    if: needs.guard.outputs.skip != 'true'
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     strategy:

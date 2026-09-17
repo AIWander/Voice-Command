@@ -68,6 +68,8 @@ until you finish or the user interrupts. Don't try to track or react to pause â€
 
 ## 2. HTTP API (`localhost:5123`)
 
+Local clients only: every request must address `localhost`, `127.0.0.1` or `[::1]` on port 5123, and a browser request must come from that same origin. Anything else gets `403` before any action runs, which stops web pages and DNS-rebinding tricks from using the microphone. curl, `voice-mcp` and hooks need no change.
+
 | Method / path | Purpose |
 |---|---|
 | `GET /status` | `{version, backend, model, app:"voice_app", features[â€¦]}` |

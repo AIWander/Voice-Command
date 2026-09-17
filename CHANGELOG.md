@@ -6,11 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [3.1.0] - 2026-09-09
+## [3.1.0] - 2026-09-16
 
 Windows release. macOS users stay on v3.0.0: this build ships no Darwin
 `voice-mcp` binaries, because they cannot be produced on the Windows host that
 cut it. The macOS bootstrap support added below is source-level and unchanged.
+
+### Security
+
+- **Web pages could drive the local API.** The Voice App binds `localhost:5123`, but
+  any visited site could still send simple cross-site POSTs to open the microphone,
+  speak text, or change interruption phrases, and a DNS-rebinding page could read
+  replies, `/listen` transcripts included. Requests now need a `localhost`,
+  `127.0.0.1` or `[::1]` Host on port 5123, and browser requests must be same-origin.
+  `voice-mcp`, curl and hooks are unaffected.
+- **`POST /play` could delete any file.** `delete_after` was honored for any path.
+  It now applies only to the app's own `tts_*.mp3` files in the temp folder, and
+  `/play` accepts only existing audio files.
+- **rustls 0.23.45** in `voice-mcp` for RUSTSEC-2026-0285 (TLS 1.3 handshake
+  messages accepted across encryption-level boundaries).
+- **No build-machine paths in `voice.exe`.** Rust panic locations and bundled C
+  source paths are remapped at build time, so the wrapper no longer carries the
+  builder's profile directory.
 
 ### Fixed
 
