@@ -111,6 +111,19 @@ set "CFLAGS_x86_64_pc_windows_msvc=%CFLAGS_x86_64_pc_windows_msvc% /d1trimfile:%
 cargo build --locked --release --manifest-path "%ROOT%\voice-mcp\Cargo.toml" --target "%RUST_TARGET%" --target-dir "%TARGET_DIR%"
 if errorlevel 1 exit /b %errorlevel%
 
+rem Optional: sign voice.exe BEFORE it is packed. Signing only the finished
+rem installer leaves the voice.exe inside it unsigned, and that is the file
+rem every MCP client launches. Set VOICE_EXE_SIGN_CMD to a command that
+rem takes the exe path as its last argument; the build stops if it fails.
+if defined VOICE_EXE_SIGN_CMD (
+  call %VOICE_EXE_SIGN_CMD% "%VOICE_EXE%"
+  if errorlevel 1 (
+    echo Signing "%VOICE_EXE%" failed. Refusing to package an unsigned voice.exe.
+    exit /b 8
+  )
+  echo Signed "%VOICE_EXE%" before packaging.
+)
+
 "%ISCC%" /DArch=%ARCH% /DVoiceExe="%VOICE_EXE%" /DRuntimeRoot="%RUNTIME_ROOT%" /DAppVersion=%APP_VERSION% /DPayloadMaxRelLen=%PAYLOAD_MAX_REL% "%ROOT%\installer\Voice-Command-Full.iss"
 if errorlevel 1 exit /b %errorlevel%
 
