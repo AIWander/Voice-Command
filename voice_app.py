@@ -26,7 +26,8 @@ HTTP API on http://localhost:5123
   GET  /status            health + features
   GET  /playback          playback state {state, text, position_ms, duration_ms, queue}
   POST /say               JSON {text, voice?, speed?, pitch?, volume?} -> queue TTS
-  POST /play              JSON {path, text?, volume?, delete_after?} -> queue audio file
+  POST /play              JSON {path, text?, volume?, delete_after?} -> queue the app's own
+                          generated speech (tts_*.mp3 in the temp folder); other paths get 403
   POST /pause /resume /toggle /interrupt /skip /stop
   GET/POST /interruption-listener[/config]
   POST /listen?...        record + transcribe (waits for playback queue to drain first)
@@ -471,30 +472,54 @@ def make_player(backend_pref):
 # ═══════════════════════════════════════════════════════════════════
 # PLAYBACK MANAGER (queue + worker + listen gate)
 # ═══════════════════════════════════════════════════════════════════
-_PLAYABLE_EXTENSIONS = (".mp3", ".wav", ".ogg", ".m4a", ".flac", ".aac", ".wma")
+# The app's own generated speech: generate_tts writes tempfile.gettempdir()/tts_<id>.mp3
+# (voice-mcp's legacy speak path uses the same name and folder).
+_APP_AUDIO_PREFIX = "tts_"
+_APP_AUDIO_SUFFIX = ".mp3"
+
+
+def _resolve_app_generated_audio(path):
+    """Return the resolved path of a TTS file this app wrote itself, else None.
+
+    POST /play and after-play deletion both accept only this, so no caller can
+    make the app play, probe or delete any other file.
+
+    Deletion history: playback items can be deleted after they play. That used
+    to trust whatever path was queued, and POST /play queued a caller-supplied
+    path with delete_after defaulting to True, so any local caller -- or a web
+    page posting to localhost:5123 -- could make the app delete an arbitrary
+    file. Because _cleanup also runs when the queue is flushed, POST /play then
+    POST /stop deleted the file without ever playing it.
+
+    Playback history: POST /play then still played any existing audio file
+    (CodeQL py/path-injection). It exists to voice the app's own generated
+    speech, never music or other files, so it is held to the same rule.
+
+    Containment is a startswith on the realpath-resolved path against the
+    resolved temp folder plus a separator. realpath collapses "..", symlinks
+    and junctions first, so nothing that escapes the folder can pass, and the
+    file must sit directly in it (no subfolders).
+    """
+    if not isinstance(path, str) or not path:
+        return None
+    try:
+        base = os.path.join(os.path.realpath(tempfile.gettempdir()), "")
+        real = os.path.realpath(path)
+    except (OSError, TypeError, ValueError):
+        return None
+    if not real.startswith(base):
+        return None
+    name = real[len(base):]
+    if os.sep in name or (os.altsep and os.altsep in name):
+        return None
+    if not name.startswith(_APP_AUDIO_PREFIX) or not name.lower().endswith(_APP_AUDIO_SUFFIX):
+        return None
+    return real
 
 
 def _is_app_generated_audio(path):
-    """True only for a TTS file this app wrote itself (see generate_tts).
-
-    Playback items can be deleted after they play. That deletion used to trust
-    whatever path was queued, and POST /play queued a caller-supplied path with
-    delete_after defaulting to True, so any local caller -- or a web page posting
-    to localhost:5123 -- could make the app delete an arbitrary file. Because
-    _cleanup also runs when the queue is flushed, POST /play then POST /stop
-    deleted the file without ever playing it. Deletion is now limited to the
-    app's own generated audio: tempfile.gettempdir()/tts_<id>.mp3.
-    """
-    if not isinstance(path, str) or not path:
-        return False
-    try:
-        real = os.path.realpath(path)
-        temp_root = os.path.realpath(tempfile.gettempdir())
-    except (OSError, TypeError, ValueError):
-        return False
-    name = os.path.basename(real)
-    return (os.path.normcase(os.path.dirname(real)) == os.path.normcase(temp_root)
-            and name.startswith("tts_") and name.lower().endswith(".mp3"))
+    """True only for a TTS file this app wrote itself (see _resolve_app_generated_audio)."""
+    return _resolve_app_generated_audio(path) is not None
 
 
 class PlaybackManager:
@@ -1398,20 +1423,29 @@ class VoiceHandler(BaseHTTPRequestHandler):
         self.send_json({'success': True, 'id': pid, 'queued': True})
 
     def handle_play(self):
+        # /play voices the app's own generated speech only (tts_*.mp3 in the temp
+        # folder). Any other path is refused before it is touched, so /play cannot
+        # play, or reveal the existence of, the caller's other files.
         body = self.read_body_json()
         path = body.get('path')
         if not isinstance(path, str) or not path:
-            self.send_json({'success': False, 'error': 'path missing or not found'})
+            self.send_json({'success': False, 'error': 'path required'}, code=400)
             return
-        path = os.path.realpath(path)
-        if not path.lower().endswith(_PLAYABLE_EXTENSIONS) or not os.path.isfile(path):
-            self.send_json({'success': False, 'error': 'path must be an existing audio file'})
+        audio = _resolve_app_generated_audio(path)
+        if audio is None:
+            self.send_json({'success': False, 'error': (
+                "path refused: /play only plays this app's own generated speech "
+                "(tts_*.mp3 directly in the temp folder)")}, code=403)
+            return
+        if not os.path.isfile(audio):
+            self.send_json({'success': False, 'error': 'generated audio file not found'}, code=404)
             return
         volume = float(body.get('volume') or get_tts_defaults()['volume'])
-        text = body.get('text') or os.path.basename(path)
-        # A caller-supplied file is never deleted; only app-generated TTS audio is.
-        delete_after = bool(body.get('delete_after', False)) and _is_app_generated_audio(path)
-        pid = MANAGER.enqueue(path, text, volume, delete_after=delete_after)
+        text = body.get('text') or os.path.basename(audio)
+        # Only app-generated audio gets here; deleting it after playback stays
+        # opt-in (default False), and _cleanup re-checks before any delete.
+        delete_after = bool(body.get('delete_after', False))
+        pid = MANAGER.enqueue(audio, text, volume, delete_after=delete_after)
         self.send_json({'success': True, 'id': pid, 'queued': True})
 
     def handle_listen(self, params):
