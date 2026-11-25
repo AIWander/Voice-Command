@@ -76,7 +76,7 @@ Local clients only: every request must address `localhost`, `127.0.0.1` or `[::1
 | `GET /playback` | `{state, text, position_ms, duration_ms, queue, recording}` — `state ∈ IDLE\|SPEAKING\|PAUSED\|LISTENING` |
 | `GET /interruption-listener` | Current phrase-listener state, configured phrases, last trigger, and mic level. |
 | `POST /say` `{text, voice?, speed?, pitch?, volume?}` | Generate TTS (edge-tts) and **queue** it (returns immediately). |
-| `POST /play` `{path, text?, volume?, delete_after?}` | Queue an existing audio file. |
+| `POST /play` `{path, text?, volume?, delete_after?}` | Queue the app's own generated speech: a `tts_*.mp3` file directly in the temp folder (what `/say` writes, as does `voice-mcp`'s legacy speak path). Any other path gets `403` before the file is touched; a missing generated file gets `404`. `delete_after` defaults to `false`. |
 | `POST /pause` · `/resume` · `/toggle` | Hold / continue / flip. |
 | `POST /interrupt` (alias `/skip`) | End current speech + drain queue → the waiting `/listen` opens the mic. |
 | `POST /stop` | End the exchange; a gating `/listen` returns `{stopped:true}`. |

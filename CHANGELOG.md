@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security
+
+- **`POST /play` could play any audio file on the machine** (CodeQL
+  `py/path-injection`). `/play` exists to voice the app's own generated speech, so
+  it now accepts only `tts_*.mp3` files directly in the temp folder, checked after
+  the path is fully resolved (`..`, symlinks and junctions included). Any other
+  path gets `403` before the file is opened or even checked for existence. A
+  missing path now gets `400`, and a missing generated file gets `404`.
+  `delete_after` is unchanged: opt-in, and only for that same app audio.
+
 ## [3.1.0] - 2026-09-16
 
 Windows release. macOS users stay on v3.0.0: this build ships no Darwin
